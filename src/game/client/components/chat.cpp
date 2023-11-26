@@ -17,6 +17,9 @@
 #include <game/client/gameclient.h>
 #include <game/localization.h>
 
+#include <regex>
+#include <random>
+
 #include "chat.h"
 
 char CChat::ms_aDisplayText[MAX_LINE_LENGTH] = {'\0'};
@@ -1265,12 +1268,48 @@ void CChat::Say(int Team, const char *pLine)
 	if(*str_utf8_skip_whitespaces(pLine) == '\0')
 		return;
 
+	std::string raw = pLine;
+
+	std::regex e(R"(\{random_player\})");
+
+	int Total = 0;
+	char aBuf[256];
+	int Bufcnt = 0;
+
+	int TotalPlayers = 0;
+
+	std::vector<int> pl = {}; 
+
+	for(const auto &pInfoByName : m_pClient->m_Snap.m_apInfoByName)
+	{
+		if(!pInfoByName) continue;
+
+		int Index = pInfoByName->m_ClientID;
+
+		if(Index == m_pClient->m_Snap.m_LocalClientID) continue;
+
+		pl.push_back(Index);
+	}
+
+	if (pl.size() == 0) pl.push_back(m_pClient->m_Snap.m_LocalClientID);
+
+	std::random_device rd;
+	std::mt19937 gen(rd());
+
+	std::uniform_int_distribution<int> distribution(0, pl.size() - 1);
+
+	int id = distribution(gen);
+
+	CGameClient::CClientData &player = m_pClient->m_aClients[pl.at(id)];
+
+	raw = std::regex_replace(raw, e, player.m_aName);
+
 	m_LastChatSend = time();
 
 	// send chat message
 	CNetMsg_Cl_Say Msg;
 	Msg.m_Team = Team;
-	Msg.m_pMessage = pLine;
+	Msg.m_pMessage = raw.c_str();
 	Client()->SendPackMsgActive(&Msg, MSGFLAG_VITAL);
 }
 
