@@ -1298,7 +1298,7 @@ void CChat::Say(int Team, const char *pLine)
 
 	int TotalPlayers = 0;
 
-	std::vector<int> pl = {}; 
+	std::vector<std::string> pl = {}; 
 
 	for(const auto &pInfoByName : m_pClient->m_Snap.m_apInfoByName)
 	{
@@ -1312,10 +1312,10 @@ void CChat::Say(int Team, const char *pLine)
 		std::string name = player.m_aName;
 		if(name.rfind("[D]", 0) == 0) continue;
 
-		pl.push_back(Index);
+		pl.push_back(player.m_aName);
 	}
 
-	if (pl.size() == 0) pl.push_back(m_pClient->m_Snap.m_LocalClientID);
+	if(pl.size() == 0) pl.push_back(m_pClient->m_aClients[m_pClient->m_Snap.m_LocalClientID].m_aName);
 
 	std::random_device rd;
 	std::mt19937 gen(rd());
@@ -1324,9 +1324,7 @@ void CChat::Say(int Team, const char *pLine)
 
 	int id = distribution(gen);
 
-	CGameClient::CClientData &player = m_pClient->m_aClients[pl.at(id)];
-
-	raw = std::regex_replace(raw, e, player.m_aName);
+	raw = std::regex_replace(raw, e, pl.at(id));
 
 	m_LastChatSend = time();
 
