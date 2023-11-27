@@ -1302,11 +1302,15 @@ void CChat::Say(int Team, const char *pLine)
 
 	for(const auto &pInfoByName : m_pClient->m_Snap.m_apInfoByName)
 	{
-		if(!pInfoByName) continue;
+		if (!pInfoByName) continue;
 
 		int Index = pInfoByName->m_ClientID;
 
-		if(Index == m_pClient->m_Snap.m_LocalClientID) continue;
+		if (Index == m_pClient->m_Snap.m_LocalClientID) continue;
+
+		CGameClient::CClientData &player = m_pClient->m_aClients[pl.at(Index)];
+		std::string name = player.m_aName;
+		if(name.rfind("[D]", 0) == 0) continue;
 
 		pl.push_back(Index);
 	}
