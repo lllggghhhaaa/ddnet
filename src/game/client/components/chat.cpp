@@ -28,6 +28,7 @@ using ReplacementFunction = std::function<std::string(CGameClient& client)>;
 
 char CChat::ms_aDisplayText[MAX_LINE_LENGTH] = {'\0'};
 
+std::string temptext = "";
 
 std::string randomPlayer(CGameClient &client)
 {
@@ -224,6 +225,11 @@ void CChat::ConSayw(IConsole::IResult *pResult, void *pUserData)
 	((CChat *)pUserData)->Sayw(0, pResult->GetString(0));
 }
 
+void CChat::ConTempText(IConsole::IResult *pResult, void *pUserData)
+{
+	((CChat *)pUserData)->TempText(pResult->GetString(0));
+}
+
 void CChat::ConSayTeam(IConsole::IResult *pResult, void *pUserData)
 {
 	((CChat *)pUserData)->Say(1, pResult->GetString(0));
@@ -284,6 +290,7 @@ void CChat::OnConsoleInit()
 {
 	Console()->Register("say", "r[message]", CFGFLAG_CLIENT, ConSay, this, "Say in chat");
 	Console()->Register("sayw", "r[message]", CFGFLAG_CLIENT, ConSayw, this, "Say in chat");
+	Console()->Register("temptext", "r[message]", CFGFLAG_CLIENT, ConTempText, this, "Set the value of a global variable");
 	Console()->Register("say_team", "r[message]", CFGFLAG_CLIENT, ConSayTeam, this, "Say in team chat");
 	Console()->Register("chat", "s['team'|'all'] ?r[message]", CFGFLAG_CLIENT, ConChat, this, "Enable chat with all/team mode");
 	Console()->Register("+show_chat", "", CFGFLAG_CLIENT, ConShowChat, this, "Show chat");
@@ -1375,6 +1382,29 @@ void CChat::Say(int Team, const char *pLine)
 	Client()->SendPackMsgActive(&Msg, MSGFLAG_VITAL);
 }
 
+void CChat::TempText(const char* pLine)
+{
+	temptext = pLine;
+
+	std::regex regex("\\{(\\w+)\\}");
+	std::map<std::string, ReplacementFunction> replacements = {
+		{"random_player", randomPlayer},
+		{"nearest", nearest},
+		{"temptext", [](CGameClient &client) { return temptext; }}};
+
+	auto replaceCallback = [&replacements, this](const std::smatch &match) {
+		auto it = replacements.find(match[1].str());
+		return (it != replacements.end()) ? it->second(*m_pClient) : match[0].str();
+	};
+
+	std::smatch match;
+
+	while(std::regex_search(temptext, match, regex))
+		temptext = std::regex_replace(temptext, regex, replaceCallback(match), std::regex_constants::format_first_only);
+
+	Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "temptext", ("Set to " + temptext).c_str());
+}
+
 void CChat::Sayw(int Team, const char *pLine)
 {
 	// don't send empty messages
@@ -1386,7 +1416,8 @@ void CChat::Sayw(int Team, const char *pLine)
 	std::regex regex("\\{(\\w+)\\}");
 	std::map<std::string, ReplacementFunction> replacements = {
 		{"random_player", randomPlayer},
-		{"nearest", nearest}};
+		{"nearest", nearest},
+		{"temptext", [](CGameClient &client) { return temptext; }}};
 
 	auto replaceCallback = [&replacements, this](const std::smatch &match)
 	{
@@ -1395,9 +1426,10 @@ void CChat::Sayw(int Team, const char *pLine)
 	};
 
 	std::smatch match;
-	std::regex_search(raw, match, regex);
 
-	raw = std::regex_replace(raw, regex, replaceCallback(match));
+
+	while(std::regex_search(raw, match, regex))
+		raw = std::regex_replace(raw, regex, replaceCallback(match), std::regex_constants::format_first_only);
 
 	m_LastChatSend = time();
 
