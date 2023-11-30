@@ -80,7 +80,7 @@ std::string nearest(CGameClient &client)
 		CGameClient::CClientData &player = client.m_aClients[Index];
 		std::string name = player.m_aName;
 
-		if(Index == client.m_Snap.m_LocalClientID)
+		if(name.rfind("[D]", 0) == 0 || Index == client.m_Snap.m_LocalClientID)
 			continue;
 
 		double d = distance(z, player.m_RenderPos);
