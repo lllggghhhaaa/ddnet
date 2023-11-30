@@ -147,6 +147,11 @@ void CChat::ConSay(IConsole::IResult *pResult, void *pUserData)
 	((CChat *)pUserData)->Say(0, pResult->GetString(0));
 }
 
+void CChat::ConSayw(IConsole::IResult *pResult, void *pUserData)
+{
+	((CChat *)pUserData)->Sayw(0, pResult->GetString(0));
+}
+
 void CChat::ConSayTeam(IConsole::IResult *pResult, void *pUserData)
 {
 	((CChat *)pUserData)->Say(1, pResult->GetString(0));
@@ -206,6 +211,7 @@ void CChat::Echo(const char *pString)
 void CChat::OnConsoleInit()
 {
 	Console()->Register("say", "r[message]", CFGFLAG_CLIENT, ConSay, this, "Say in chat");
+	Console()->Register("sayw", "r[message]", CFGFLAG_CLIENT, ConSayw, this, "Say in chat");
 	Console()->Register("say_team", "r[message]", CFGFLAG_CLIENT, ConSayTeam, this, "Say in team chat");
 	Console()->Register("chat", "s['team'|'all'] ?r[message]", CFGFLAG_CLIENT, ConChat, this, "Enable chat with all/team mode");
 	Console()->Register("+show_chat", "", CFGFLAG_CLIENT, ConShowChat, this, "Show chat");
@@ -1288,15 +1294,24 @@ void CChat::Say(int Team, const char *pLine)
 	if(*str_utf8_skip_whitespaces(pLine) == '\0')
 		return;
 
+	m_LastChatSend = time();
+
+	// send chat message
+	CNetMsg_Cl_Say Msg;
+	Msg.m_Team = Team;
+	Msg.m_pMessage = pLine;
+	Client()->SendPackMsgActive(&Msg, MSGFLAG_VITAL);
+}
+
+void CChat::Sayw(int Team, const char *pLine)
+{
+	// don't send empty messages
+	if(*str_utf8_skip_whitespaces(pLine) == '\0')
+		return;
+
 	std::string raw = pLine;
 
 	std::regex e(R"(\{random_player\})");
-
-	int Total = 0;
-	char aBuf[256];
-	int Bufcnt = 0;
-
-	int TotalPlayers = 0;
 
 	std::vector<std::string> pl = {}; 
 
@@ -1310,7 +1325,7 @@ void CChat::Say(int Team, const char *pLine)
 
 		CGameClient::CClientData &player = m_pClient->m_aClients[Index];
 		std::string name = player.m_aName;
-		if(name.rfind("[D]", 0) == 0) continue;
+		if (name.rfind("[D]", 0) == 0) continue;
 
 		pl.push_back(player.m_aName);
 	}
