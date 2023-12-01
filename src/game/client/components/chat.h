@@ -131,6 +131,7 @@ class CChat : public CComponent
 	static void ConTempText(IConsole::IResult *pResult, void *pUserData);
 	static void ConSayTeam(IConsole::IResult *pResult, void *pUserData);
 	static void ConChat(IConsole::IResult *pResult, void *pUserData);
+	static void ConRegisterEvent(IConsole::IResult *pResult, void *pUserData);
 	static void ConShowChat(IConsole::IResult *pResult, void *pUserData);
 	static void ConEcho(IConsole::IResult *pResult, void *pUserData);
 
@@ -154,6 +155,7 @@ public:
 	void Say(int Team, const char *pLine);
 	void Sayw(int Team, const char *pLine);
 	void TempText(const char *pLine);
+	void RegisterEvent(const char* index, const char *pLine);
 	void SayChat(const char *pLine);
 	void RegisterCommand(const char *pName, const char *pParams, int flags, const char *pHelp);
 	void Echo(const char *pString);

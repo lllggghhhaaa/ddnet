@@ -29,6 +29,10 @@ using ReplacementFunction = std::function<std::string(CGameClient& client)>;
 char CChat::ms_aDisplayText[MAX_LINE_LENGTH] = {'\0'};
 
 std::string temptext = "";
+std::map<std::string, std::string> events = 
+{
+		{"mention", ""} // mention
+};
 
 std::string randomPlayer(CGameClient &client)
 {
@@ -230,6 +234,11 @@ void CChat::ConTempText(IConsole::IResult *pResult, void *pUserData)
 	((CChat *)pUserData)->TempText(pResult->GetString(0));
 }
 
+void CChat::ConRegisterEvent(IConsole::IResult *pResult, void *pUserData)
+{
+	((CChat *)pUserData)->RegisterEvent(pResult->GetString(0), pResult->GetString(1));
+}
+
 void CChat::ConSayTeam(IConsole::IResult *pResult, void *pUserData)
 {
 	((CChat *)pUserData)->Say(1, pResult->GetString(0));
@@ -292,6 +301,7 @@ void CChat::OnConsoleInit()
 	Console()->Register("sayw", "r[message]", CFGFLAG_CLIENT, ConSayw, this, "Say in chat");
 	Console()->Register("temptext", "r[message]", CFGFLAG_CLIENT, ConTempText, this, "Set the value of a global variable");
 	Console()->Register("say_team", "r[message]", CFGFLAG_CLIENT, ConSayTeam, this, "Say in team chat");
+	Console()->Register("register_event", "r[index] r[command]", CFGFLAG_CLIENT, ConRegisterEvent, this, "Register a event");
 	Console()->Register("chat", "s['team'|'all'] ?r[message]", CFGFLAG_CLIENT, ConChat, this, "Enable chat with all/team mode");
 	Console()->Register("+show_chat", "", CFGFLAG_CLIENT, ConShowChat, this, "Show chat");
 	Console()->Register("echo", "r[message]", CFGFLAG_CLIENT | CFGFLAG_STORE, ConEcho, this, "Echo the text in chat window");
@@ -708,6 +718,18 @@ void CChat::AddLine(int ClientID, int Team, const char *pLine)
 					  (m_pClient->m_Snap.m_LocalClientID != ClientID && g_Config.m_ClShowChatFriends && !m_pClient->m_aClients[ClientID].m_Friend) ||
 					  (m_pClient->m_Snap.m_LocalClientID != ClientID && m_pClient->m_aClients[ClientID].m_Foe))))
 		return;
+
+	std::string text = pLine;
+	std::string name = m_pClient->m_aClients[m_pClient->m_Snap.m_LocalClientID].m_aName;
+
+	if(text.find(name) != std::string::npos)
+	{
+		if(events["mention"] != "")
+		{
+			Console()->ExecuteLine(events["mention"].c_str());
+			Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "registerevent", "Event mention executed");
+		}
+	}
 
 	// trim right and set maximum length to 256 utf8-characters
 	int Length = 0;
@@ -1403,6 +1425,17 @@ void CChat::TempText(const char* pLine)
 		temptext = std::regex_replace(temptext, regex, replaceCallback(match), std::regex_constants::format_first_only);
 
 	Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "temptext", ("Set to " + temptext).c_str());
+}
+
+void CChat::RegisterEvent(const char* index, const char* pLine) 
+{
+	if (events.find(index) == events.end()) {
+		Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "registerevent", "Event not found");
+		return;
+	}
+
+	events[index] = pLine;
+	Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "registerevent", "Event changed");
 }
 
 void CChat::Sayw(int Team, const char *pLine)
