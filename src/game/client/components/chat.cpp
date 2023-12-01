@@ -872,9 +872,24 @@ void CChat::AddLine(int ClientID, int Team, const char *pLine)
 			{
 				if(events["mention"] != "")
 				{
+					std::string exectext = events["mention"];
+					std::string mentionname = m_pClient->m_aClients[ClientID].m_aName;
 
+					std::regex regex("\\{(\\w+)\\}");
+					std::map<std::string, ReplacementFunction> replacements = {
+						{"mention", [mentionname](CGameClient &client) { return mentionname; }}};
 
-					Console()->ExecuteLine(events["mention"].c_str());
+					auto replaceCallback = [&replacements, this](const std::smatch &match) {
+						auto it = replacements.find(match[1].str());
+						return (it != replacements.end()) ? it->second(*m_pClient) : match[0].str();
+					};
+
+					std::smatch match;
+
+					while(std::regex_search(exectext, match, regex))
+						exectext = std::regex_replace(exectext, regex, replaceCallback(match), std::regex_constants::format_first_only);
+
+					Console()->ExecuteLine(exectext.c_str());
 					Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "registerevent", "Event mention executed");
 				}
 			}
