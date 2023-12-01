@@ -299,9 +299,9 @@ void CChat::OnConsoleInit()
 {
 	Console()->Register("say", "r[message]", CFGFLAG_CLIENT, ConSay, this, "Say in chat");
 	Console()->Register("sayw", "r[message]", CFGFLAG_CLIENT, ConSayw, this, "Say in chat");
-	Console()->Register("temptext", "r[message]", CFGFLAG_CLIENT, ConTempText, this, "Set the value of a global variable");
+	Console()->Register("temptext", "r[message]", CFGFLAG_CLIENT | CFGFLAG_SAVE, ConTempText, this, "Set the value of a global variable");
 	Console()->Register("say_team", "r[message]", CFGFLAG_CLIENT, ConSayTeam, this, "Say in team chat");
-	Console()->Register("register_event", "r[index] r[command]", CFGFLAG_CLIENT, ConRegisterEvent, this, "Register a event");
+	Console()->Register("register_event", "s[index] r[command]", CFGFLAG_CLIENT | CFGFLAG_SAVE, ConRegisterEvent, this, "Register a event");
 	Console()->Register("chat", "s['team'|'all'] ?r[message]", CFGFLAG_CLIENT, ConChat, this, "Enable chat with all/team mode");
 	Console()->Register("+show_chat", "", CFGFLAG_CLIENT, ConShowChat, this, "Show chat");
 	Console()->Register("echo", "r[message]", CFGFLAG_CLIENT | CFGFLAG_STORE, ConEcho, this, "Echo the text in chat window");
