@@ -21,6 +21,10 @@
 #include <random>
 #include <map>
 #include <functional>
+#include <sstream>
+#include <chrono>
+#include <thread>
+#include <future>
 
 #include "chat.h"
 
@@ -886,8 +890,18 @@ void CChat::AddLine(int ClientID, int Team, const char *pLine)
 						while(std::regex_search(exectext, match, regex))
 							exectext = std::regex_replace(exectext, regex, replaceCallback(match), std::regex_constants::format_first_only);
 
-						Console()->ExecuteLine(exectext.c_str());
-						Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "registerevent", "Event friend_joined executed");
+						std::future<void> future = std::async(std::launch::async, [exectext, this]() {
+							std::istringstream iss(exectext);
+							std::string token;
+
+							std::this_thread::sleep_for(std::chrono::seconds(3));
+
+							while(std::getline(iss, token, ';'))
+								Console()->ExecuteLine(token.c_str());
+							Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "registerevent", "Event friend_joined executed");
+						});
+
+						future.get();
 					}
 				}
 			}
@@ -923,7 +937,11 @@ void CChat::AddLine(int ClientID, int Team, const char *pLine)
 					while(std::regex_search(exectext, match, regex))
 						exectext = std::regex_replace(exectext, regex, replaceCallback(match), std::regex_constants::format_first_only);
 
-					Console()->ExecuteLine(exectext.c_str());
+					std::istringstream iss(exectext);
+					std::string token;
+					while(std::getline(iss, token, ';'))
+						Console()->ExecuteLine(token.c_str());
+
 					Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "registerevent", "Event mention executed");
 				}
 			}
