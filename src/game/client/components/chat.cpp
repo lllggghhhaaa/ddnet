@@ -872,6 +872,8 @@ void CChat::AddLine(int ClientID, int Team, const char *pLine)
 			{
 				if(events["mention"] != "")
 				{
+
+
 					Console()->ExecuteLine(events["mention"].c_str());
 					Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "registerevent", "Event mention executed");
 				}
