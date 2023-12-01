@@ -31,7 +31,8 @@ char CChat::ms_aDisplayText[MAX_LINE_LENGTH] = {'\0'};
 std::string temptext = "";
 std::map<std::string, std::string> events = 
 {
-		{"mention", ""} // mention
+		{"mention", ""},
+		{"friend_joined", ""}
 };
 
 std::string randomPlayer(CGameClient &client)
@@ -855,8 +856,41 @@ void CChat::AddLine(int ClientID, int Team, const char *pLine)
 
 		if(pCurrentLine->m_ClientID == SERVER_MSG)
 		{
+			std::string text = pLine;
 			str_copy(pCurrentLine->m_aName, "*** ");
 			str_copy(pCurrentLine->m_aText, pLine);
+
+			std::regex regex("\\'([^\\']+)' entered and joined the game");
+			std::smatch matches;
+
+			if (std::regex_search(text, matches, regex)) 
+			{
+				std::string playername = matches[1];
+				if (m_pClient->Friends()->IsFriend(playername.c_str(), "", true)) 
+				{
+					if(events["friend_joined"] != "")
+					{
+						std::string exectext = events["friend_joined"];
+
+						std::regex regex("\\{(\\w+)\\}");
+						std::map<std::string, ReplacementFunction> replacements = {
+							{"friend", [playername](CGameClient &client) { return playername; }}};
+
+						auto replaceCallback = [&replacements, this](const std::smatch &match) {
+							auto it = replacements.find(match[1].str());
+							return (it != replacements.end()) ? it->second(*m_pClient) : match[0].str();
+						};
+
+						std::smatch match;
+
+						while(std::regex_search(exectext, match, regex))
+							exectext = std::regex_replace(exectext, regex, replaceCallback(match), std::regex_constants::format_first_only);
+
+						Console()->ExecuteLine(exectext.c_str());
+						Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "registerevent", "Event friend_joined executed");
+					}
+				}
+			}
 		}
 		else if(pCurrentLine->m_ClientID == CLIENT_MSG)
 		{
