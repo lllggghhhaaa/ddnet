@@ -719,18 +719,6 @@ void CChat::AddLine(int ClientID, int Team, const char *pLine)
 					  (m_pClient->m_Snap.m_LocalClientID != ClientID && m_pClient->m_aClients[ClientID].m_Foe))))
 		return;
 
-	std::string text = pLine;
-	std::string name = m_pClient->m_aClients[m_pClient->m_Snap.m_LocalClientID].m_aName;
-
-	if(text.find(name) != std::string::npos)
-	{
-		if(events["mention"] != "")
-		{
-			Console()->ExecuteLine(events["mention"].c_str());
-			Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "registerevent", "Event mention executed");
-		}
-	}
-
 	// trim right and set maximum length to 256 utf8-characters
 	int Length = 0;
 	const char *pStr = pLine;
@@ -877,6 +865,19 @@ void CChat::AddLine(int ClientID, int Team, const char *pLine)
 		}
 		else
 		{
+			std::string text = pLine;
+			std::string name = m_pClient->m_aClients[m_pClient->m_Snap.m_LocalClientID].m_aName;
+
+			if(text.find(name) != std::string::npos)
+			{
+				if(events["mention"] != "")
+				{
+					Console()->ExecuteLine(events["mention"].c_str());
+					Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "registerevent", "Event mention executed");
+				}
+			}
+
+
 			if(m_pClient->m_aClients[ClientID].m_Team == TEAM_SPECTATORS)
 				pCurrentLine->m_NameColor = TEAM_SPECTATORS;
 
