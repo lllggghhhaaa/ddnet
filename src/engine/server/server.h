@@ -11,6 +11,7 @@
 #include <engine/shared/demo.h>
 #include <engine/shared/econ.h>
 #include <engine/shared/fifo.h>
+#include <engine/shared/http.h>
 #include <engine/shared/netban.h>
 #include <engine/shared/network.h>
 #include <engine/shared/protocol.h>
@@ -238,6 +239,7 @@ public:
 	CEcon m_Econ;
 	CFifo m_Fifo;
 	CServerBan m_ServerBan;
+	CHttp m_Http;
 
 	IEngineMap *m_pMap;
 
@@ -268,13 +270,20 @@ public:
 		NUM_MAP_TYPES
 	};
 
+	enum
+	{
+		RECORDER_MANUAL = MAX_CLIENTS,
+		RECORDER_AUTO = MAX_CLIENTS + 1,
+		NUM_RECORDERS = MAX_CLIENTS + 2,
+	};
+
 	char m_aCurrentMap[IO_MAX_PATH_LENGTH];
 	SHA256_DIGEST m_aCurrentMapSha256[NUM_MAP_TYPES];
 	unsigned m_aCurrentMapCrc[NUM_MAP_TYPES];
 	unsigned char *m_apCurrentMapData[NUM_MAP_TYPES];
 	unsigned int m_aCurrentMapSize[NUM_MAP_TYPES];
 
-	CDemoRecorder m_aDemoRecorder[MAX_CLIENTS + 1];
+	CDemoRecorder m_aDemoRecorder[NUM_RECORDERS];
 	CAuthManager m_AuthManager;
 
 	int64_t m_ServerInfoFirstRequest;
@@ -410,11 +419,10 @@ public:
 	void StartRecord(int ClientID) override;
 	void StopRecord(int ClientID) override;
 	bool IsRecording(int ClientID) override;
+	void StopDemos() override;
 
 	int Run();
 
-	static void ConTestingCommands(IConsole::IResult *pResult, void *pUser);
-	static void ConRescue(IConsole::IResult *pResult, void *pUser);
 	static void ConKick(IConsole::IResult *pResult, void *pUser);
 	static void ConStatus(IConsole::IResult *pResult, void *pUser);
 	static void ConShutdown(IConsole::IResult *pResult, void *pUser);

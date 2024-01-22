@@ -6,7 +6,6 @@
 #include "serverbrowser_ping_cache.h"
 
 #include <algorithm>
-#include <climits>
 #include <unordered_set>
 #include <vector>
 
@@ -25,6 +24,7 @@
 #include <engine/engine.h>
 #include <engine/favorites.h>
 #include <engine/friends.h>
+#include <engine/http.h>
 #include <engine/storage.h>
 
 class CSortWrap
@@ -57,17 +57,10 @@ CServerBrowser::CServerBrowser() :
 	m_ppServerlist = nullptr;
 	m_pSortedServerlist = nullptr;
 
-	m_pFirstReqServer = nullptr; // request list
-	m_pLastReqServer = nullptr;
-	m_NumRequests = 0;
-
 	m_NeedResort = false;
 	m_Sorthash = 0;
 
-	m_NumSortedServers = 0;
 	m_NumSortedServersCapacity = 0;
-	m_NumSortedPlayers = 0;
-	m_NumServers = 0;
 	m_NumServerCapacity = 0;
 
 	m_ServerlistType = 0;
@@ -76,6 +69,8 @@ CServerBrowser::CServerBrowser() :
 
 	m_pDDNetInfo = nullptr;
 	m_DDNetInfoUpdateTime = 0;
+
+	CleanUp();
 }
 
 CServerBrowser::~CServerBrowser()
@@ -100,6 +95,7 @@ void CServerBrowser::SetBaseInfo(class CNetClient *pClient, const char *pNetVers
 	m_pFavorites = Kernel()->RequestInterface<IFavorites>();
 	m_pFriends = Kernel()->RequestInterface<IFriends>();
 	m_pStorage = Kernel()->RequestInterface<IStorage>();
+	m_pHttpClient = Kernel()->RequestInterface<IHttp>();
 	m_pPingCache = CreateServerBrowserPingCache(m_pConsole, m_pStorage);
 
 	RegisterCommands();
@@ -107,7 +103,7 @@ void CServerBrowser::SetBaseInfo(class CNetClient *pClient, const char *pNetVers
 
 void CServerBrowser::OnInit()
 {
-	m_pHttp = CreateServerBrowserHttp(m_pEngine, m_pConsole, m_pStorage, g_Config.m_BrCachedBestServerinfoUrl);
+	m_pHttp = CreateServerBrowserHttp(m_pEngine, m_pConsole, m_pStorage, m_pHttpClient, g_Config.m_BrCachedBestServerinfoUrl);
 }
 
 void CServerBrowser::RegisterCommands()
@@ -127,7 +123,7 @@ void CServerBrowser::Con_LeakIpAddress(IConsole::IResult *pResult, void *pUserDa
 	{
 	public:
 		CServerBrowser *m_pThis;
-		bool operator()(int i, int j)
+		bool operator()(int i, int j) const
 		{
 			NETADDR Addr1 = m_pThis->m_ppServerlist[i]->m_Info.m_aAddresses[0];
 			NETADDR Addr2 = m_pThis->m_ppServerlist[j]->m_Info.m_aAddresses[0];
@@ -546,7 +542,7 @@ void ServerBrowserFormatAddresses(char *pBuffer, int BufferSize, NETADDR *pAddrs
 	}
 }
 
-void CServerBrowser::SetInfo(CServerEntry *pEntry, const CServerInfo &Info)
+void CServerBrowser::SetInfo(CServerEntry *pEntry, const CServerInfo &Info) const
 {
 	const CServerInfo TmpInfo = pEntry->m_Info;
 	pEntry->m_Info = Info;
@@ -555,7 +551,9 @@ void CServerBrowser::SetInfo(CServerEntry *pEntry, const CServerInfo &Info)
 	mem_copy(pEntry->m_Info.m_aAddresses, TmpInfo.m_aAddresses, sizeof(pEntry->m_Info.m_aAddresses));
 	pEntry->m_Info.m_NumAddresses = TmpInfo.m_NumAddresses;
 	ServerBrowserFormatAddresses(pEntry->m_Info.m_aAddress, sizeof(pEntry->m_Info.m_aAddress), pEntry->m_Info.m_aAddresses, pEntry->m_Info.m_NumAddresses);
-	UpdateServerCommunity(&pEntry->m_Info);
+	str_copy(pEntry->m_Info.m_aCommunityId, TmpInfo.m_aCommunityId);
+	str_copy(pEntry->m_Info.m_aCommunityCountry, TmpInfo.m_aCommunityCountry);
+	str_copy(pEntry->m_Info.m_aCommunityType, TmpInfo.m_aCommunityType);
 	UpdateServerRank(&pEntry->m_Info);
 
 	if(pEntry->m_Info.m_ClientScoreKind == CServerInfo::CLIENT_SCORE_KIND_UNSPECIFIED)
@@ -580,7 +578,7 @@ void CServerBrowser::SetInfo(CServerEntry *pEntry, const CServerInfo &Info)
 		{
 		}
 
-		bool operator()(const CServerInfo::CClient &p0, const CServerInfo::CClient &p1)
+		bool operator()(const CServerInfo::CClient &p0, const CServerInfo::CClient &p1) const
 		{
 			// Sort players before non players
 			if(p0.m_Player && !p1.m_Player)
@@ -667,6 +665,7 @@ CServerBrowser::CServerEntry *CServerBrowser::Add(const NETADDR *pAddrs, int Num
 	pEntry->m_Info.m_Latency = 999;
 	pEntry->m_Info.m_HasRank = CServerInfo::RANK_UNAVAILABLE;
 	ServerBrowserFormatAddresses(pEntry->m_Info.m_aAddress, sizeof(pEntry->m_Info.m_aAddress), pEntry->m_Info.m_aAddresses, pEntry->m_Info.m_NumAddresses);
+	UpdateServerCommunity(&pEntry->m_Info);
 	str_copy(pEntry->m_Info.m_aName, pEntry->m_Info.m_aAddress, sizeof(pEntry->m_Info.m_aName));
 
 	// check if it's a favorite

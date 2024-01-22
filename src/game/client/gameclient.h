@@ -34,8 +34,8 @@
 #include "components/freezebars.h"
 #include "components/ghost.h"
 #include "components/hud.h"
+#include "components/infomessages.h"
 #include "components/items.h"
-#include "components/killmessages.h"
 #include "components/mapimages.h"
 #include "components/maplayers.h"
 #include "components/mapsounds.h"
@@ -111,7 +111,7 @@ class CGameClient : public IGameClient
 {
 public:
 	// all components
-	CKillMessages m_KillMessages;
+	CInfoMessages m_InfoMessages;
 	CCamera m_Camera;
 	CChat m_Chat;
 	CMotd m_Motd;
@@ -177,6 +177,7 @@ private:
 #if defined(CONF_AUTOUPDATE)
 	class IUpdater *m_pUpdater;
 #endif
+	class IHttp *m_pHttp;
 
 	CLayers m_Layers;
 	CCollision m_Collision;
@@ -251,6 +252,10 @@ public:
 		return m_pUpdater;
 	}
 #endif
+	class IHttp *Http()
+	{
+		return m_pHttp;
+	}
 
 	int NetobjNumCorrections()
 	{
@@ -507,7 +512,7 @@ public:
 	void SendSwitchTeam(int Team);
 	void SendInfo(bool Start);
 	void SendDummyInfo(bool Start) override;
-	void SendKill(int ClientID);
+	void SendKill(int ClientID) const;
 
 	// DDRace
 
@@ -521,7 +526,7 @@ public:
 
 	int IntersectCharacter(vec2 HookPos, vec2 NewPos, vec2 &NewPos2, int ownID);
 
-	int GetLastRaceTick() override;
+	int GetLastRaceTick() const override;
 
 	bool IsTeamPlay() { return m_Snap.m_pGameInfoObj && m_Snap.m_pGameInfoObj->m_GameFlags & GAMEFLAG_TEAMS; }
 
@@ -543,11 +548,11 @@ public:
 
 	void DummyResetInput() override;
 	void Echo(const char *pString) override;
-	bool IsOtherTeam(int ClientID);
-	int SwitchStateTeam();
-	bool IsLocalCharSuper();
-	bool CanDisplayWarning() override;
-	bool IsDisplayingWarning() override;
+	bool IsOtherTeam(int ClientID) const;
+	int SwitchStateTeam() const;
+	bool IsLocalCharSuper() const;
+	bool CanDisplayWarning() const override;
+	bool IsDisplayingWarning() const override;
 	CNetObjHandler *GetNetObjHandler() override;
 
 	void LoadGameSkin(const char *pPath, bool AsDir = false);

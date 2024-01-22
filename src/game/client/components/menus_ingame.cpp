@@ -75,7 +75,7 @@ void CMenus::RenderGame(CUIRect MainView)
 	static CButtonContainer s_DummyButton;
 	if(!Client()->DummyAllowed())
 	{
-		DoButton_Menu(&s_DummyButton, Localize("Connect Dummy"), 1, &Button, nullptr, IGraphics::CORNER_ALL, 5.0f, 0.0f, vec4(1.0f, 0.5f, 0.5f, 0.75f), vec4(1, 0.5f, 0.5f, 0.5f));
+		DoButton_Menu(&s_DummyButton, Localize("Connect Dummy"), 1, &Button);
 	}
 	else if(DummyConnecting)
 	{
@@ -105,13 +105,13 @@ void CMenus::RenderGame(CUIRect MainView)
 	ButtonBar.VSplitRight(140.0f, &ButtonBar, &Button);
 
 	static CButtonContainer s_DemoButton;
-	bool Recording = DemoRecorder(RECORDER_MANUAL)->IsRecording();
+	const bool Recording = DemoRecorder(RECORDER_MANUAL)->IsRecording();
 	if(DoButton_Menu(&s_DemoButton, Recording ? Localize("Stop record") : Localize("Record demo"), 0, &Button))
 	{
 		if(!Recording)
 			Client()->DemoRecorder_Start(Client()->GetCurrentMap(), true, RECORDER_MANUAL);
 		else
-			Client()->DemoRecorder_Stop(RECORDER_MANUAL);
+			Client()->DemoRecorder(RECORDER_MANUAL)->Stop(IDemoRecorder::EStopMode::KEEP_FILE);
 	}
 
 	static CButtonContainer s_SpectateButton;
@@ -303,7 +303,7 @@ void CMenus::RenderPlayers(CUIRect MainView)
 
 		const CAnimState *pIdleState = CAnimState::GetIdle();
 		vec2 OffsetToMid;
-		RenderTools()->GetRenderTeeOffsetToRenderedTee(pIdleState, &TeeInfo, OffsetToMid);
+		CRenderTools::GetRenderTeeOffsetToRenderedTee(pIdleState, &TeeInfo, OffsetToMid);
 		vec2 TeeRenderPos(Button.x + Button.h / 2, Button.y + Button.h / 2 + OffsetToMid.y);
 
 		RenderTools()->RenderTee(pIdleState, &TeeInfo, EMOTE_NORMAL, vec2(1.0f, 0.0f), TeeRenderPos);
@@ -554,7 +554,9 @@ bool CMenus::RenderServerControlServer(CUIRect MainView)
 		if(!Item.m_Visible)
 			continue;
 
-		UI()->DoLabel(&Item.m_Rect, pOption->m_aDescription, 13.0f, TEXTALIGN_ML);
+		CUIRect Label;
+		Item.m_Rect.VMargin(2.0f, &Label);
+		UI()->DoLabel(&Label, pOption->m_aDescription, 13.0f, TEXTALIGN_ML);
 	}
 
 	s_CurVoteOption = s_ListBox.DoEnd();
@@ -566,8 +568,8 @@ bool CMenus::RenderServerControlServer(CUIRect MainView)
 bool CMenus::RenderServerControlKick(CUIRect MainView, bool FilterSpectators)
 {
 	int NumOptions = 0;
-	int Selected = 0;
-	static int aPlayerIDs[MAX_CLIENTS];
+	int Selected = -1;
+	int aPlayerIDs[MAX_CLIENTS];
 	for(const auto &pInfoByName : m_pClient->m_Snap.m_apInfoByName)
 	{
 		if(!pInfoByName)
@@ -582,7 +584,8 @@ bool CMenus::RenderServerControlKick(CUIRect MainView, bool FilterSpectators)
 
 		if(m_CallvoteSelectedPlayer == Index)
 			Selected = NumOptions;
-		aPlayerIDs[NumOptions++] = Index;
+		aPlayerIDs[NumOptions] = Index;
+		NumOptions++;
 	}
 
 	static CListBox s_ListBox;
@@ -602,7 +605,7 @@ bool CMenus::RenderServerControlKick(CUIRect MainView, bool FilterSpectators)
 
 		const CAnimState *pIdleState = CAnimState::GetIdle();
 		vec2 OffsetToMid;
-		RenderTools()->GetRenderTeeOffsetToRenderedTee(pIdleState, &TeeInfo, OffsetToMid);
+		CRenderTools::GetRenderTeeOffsetToRenderedTee(pIdleState, &TeeInfo, OffsetToMid);
 		vec2 TeeRenderPos(TeeRect.x + TeeInfo.m_Size / 2, TeeRect.y + TeeInfo.m_Size / 2 + OffsetToMid.y);
 
 		RenderTools()->RenderTee(pIdleState, &TeeInfo, EMOTE_NORMAL, vec2(1.0f, 0.0f), TeeRenderPos);
@@ -819,9 +822,12 @@ void CMenus::RenderInGameNetwork(CUIRect MainView)
 
 	int NewPage = g_Config.m_UiPage;
 
-	TabBar.VSplitLeft(100.0f, &Button, &TabBar);
+	TextRender()->SetFontPreset(EFontPreset::ICON_FONT);
+	TextRender()->SetRenderFlags(ETextRenderFlags::TEXT_RENDER_FLAG_ONLY_ADVANCE_WIDTH | ETextRenderFlags::TEXT_RENDER_FLAG_NO_X_BEARING | ETextRenderFlags::TEXT_RENDER_FLAG_NO_Y_BEARING | ETextRenderFlags::TEXT_RENDER_FLAG_NO_PIXEL_ALIGMENT | ETextRenderFlags::TEXT_RENDER_FLAG_NO_OVERSIZE);
+
+	TabBar.VSplitLeft(75.0f, &Button, &TabBar);
 	static CButtonContainer s_InternetButton;
-	if(DoButton_MenuTab(&s_InternetButton, Localize("Internet"), g_Config.m_UiPage == PAGE_INTERNET, &Button, IGraphics::CORNER_NONE))
+	if(DoButton_MenuTab(&s_InternetButton, FONT_ICON_EARTH_AMERICAS, g_Config.m_UiPage == PAGE_INTERNET, &Button, IGraphics::CORNER_NONE))
 	{
 		if(g_Config.m_UiPage != PAGE_INTERNET)
 		{
@@ -831,19 +837,21 @@ void CMenus::RenderInGameNetwork(CUIRect MainView)
 		}
 		NewPage = PAGE_INTERNET;
 	}
+	GameClient()->m_Tooltips.DoToolTip(&s_InternetButton, &Button, Localize("Internet"));
 
-	TabBar.VSplitLeft(80.0f, &Button, &TabBar);
+	TabBar.VSplitLeft(75.0f, &Button, &TabBar);
 	static CButtonContainer s_LanButton;
-	if(DoButton_MenuTab(&s_LanButton, Localize("LAN"), g_Config.m_UiPage == PAGE_LAN, &Button, IGraphics::CORNER_NONE))
+	if(DoButton_MenuTab(&s_LanButton, FONT_ICON_NETWORK_WIRED, g_Config.m_UiPage == PAGE_LAN, &Button, IGraphics::CORNER_NONE))
 	{
 		if(g_Config.m_UiPage != PAGE_LAN)
 			ServerBrowser()->Refresh(IServerBrowser::TYPE_LAN);
 		NewPage = PAGE_LAN;
 	}
+	GameClient()->m_Tooltips.DoToolTip(&s_LanButton, &Button, Localize("LAN"));
 
-	TabBar.VSplitLeft(110.0f, &Button, &TabBar);
+	TabBar.VSplitLeft(75.0f, &Button, &TabBar);
 	static CButtonContainer s_FavoritesButton;
-	if(DoButton_MenuTab(&s_FavoritesButton, Localize("Favorites"), g_Config.m_UiPage == PAGE_FAVORITES, &Button, IGraphics::CORNER_NONE))
+	if(DoButton_MenuTab(&s_FavoritesButton, FONT_ICON_STAR, g_Config.m_UiPage == PAGE_FAVORITES, &Button, IGraphics::CORNER_NONE))
 	{
 		if(g_Config.m_UiPage != PAGE_FAVORITES)
 		{
@@ -853,6 +861,10 @@ void CMenus::RenderInGameNetwork(CUIRect MainView)
 		}
 		NewPage = PAGE_FAVORITES;
 	}
+	GameClient()->m_Tooltips.DoToolTip(&s_FavoritesButton, &Button, Localize("Favorites"));
+
+	TextRender()->SetRenderFlags(0);
+	TextRender()->SetFontPreset(EFontPreset::DEFAULT_FONT);
 
 	if(NewPage != g_Config.m_UiPage)
 	{
@@ -1115,7 +1127,7 @@ void CMenus::RenderGhost(CUIRect MainView)
 	static CButtonContainer s_DirectoryButton;
 	static CButtonContainer s_ActivateAll;
 
-	if(DoButton_FontIcon(&s_ReloadButton, FONT_ICON_ARROW_ROTATE_RIGHT, 0, &Button) || Input()->KeyPress(KEY_F5))
+	if(DoButton_FontIcon(&s_ReloadButton, FONT_ICON_ARROW_ROTATE_RIGHT, 0, &Button) || Input()->KeyPress(KEY_F5) || (Input()->KeyPress(KEY_R) && Input()->ModifierIsPressed()))
 	{
 		m_pClient->m_Ghost.UnloadAll();
 		GhostlistPopulate();

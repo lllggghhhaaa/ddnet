@@ -116,7 +116,7 @@ void CGameWorld::InsertEntity(CEntity *pEnt, bool Last)
 		if(ID >= 0 && ID < MAX_CLIENTS)
 		{
 			m_apCharacters[ID] = pChar;
-			m_Core.m_apCharacters[ID] = pChar->Core();
+			m_Core.m_apCharacters[ID] = &pChar->m_Core;
 		}
 		pChar->SetCoreWorld(this);
 	}
@@ -309,12 +309,9 @@ void CGameWorld::ReleaseHooked(int ClientID)
 	CCharacter *pChr = (CCharacter *)CGameWorld::FindFirst(CGameWorld::ENTTYPE_CHARACTER);
 	for(; pChr; pChr = (CCharacter *)pChr->TypeNext())
 	{
-		CCharacterCore *pCore = pChr->Core();
-		if(pCore->HookedPlayer() == ClientID)
+		if(pChr->Core()->HookedPlayer() == ClientID && !pChr->IsSuper())
 		{
-			pCore->SetHookedPlayer(-1);
-			pCore->m_HookState = HOOK_RETRACTED;
-			pCore->m_TriggeredEvents |= COREEVENT_HOOK_RETRACT;
+			pChr->ReleaseHook();
 		}
 	}
 }
@@ -372,7 +369,7 @@ void CGameWorld::CreateExplosion(vec2 Pos, int Owner, int Weapon, bool NoDamage,
 	}
 }
 
-bool CGameWorld::IsLocalTeam(int OwnerID)
+bool CGameWorld::IsLocalTeam(int OwnerID) const
 {
 	return OwnerID < 0 || m_Teams.CanCollide(m_LocalClientID, OwnerID);
 }
@@ -557,7 +554,7 @@ void CGameWorld::NetObjEnd()
 					if(pHookedChar->m_MarkedForDestroy)
 					{
 						pHookedChar->m_Pos = pHookedChar->m_Core.m_Pos = pChar->m_Core.m_HookPos;
-						pHookedChar->m_Core.m_Vel = vec2(0, 0);
+						pHookedChar->ResetVelocity();
 						mem_zero(&pHookedChar->m_SavedInput, sizeof(pHookedChar->m_SavedInput));
 						pHookedChar->m_SavedInput.m_TargetY = -1;
 						pHookedChar->m_KeepHooked = true;
@@ -577,7 +574,7 @@ void CGameWorld::NetObjEnd()
 		if(ID >= 0 && ID < MAX_CLIENTS)
 		{
 			m_apCharacters[ID] = pChar;
-			m_Core.m_apCharacters[ID] = pChar->Core();
+			m_Core.m_apCharacters[ID] = &pChar->m_Core;
 		}
 	}
 }
@@ -698,7 +695,7 @@ CEntity *CGameWorld::FindMatch(int ObjID, int ObjType, const void *pObjData)
 	return 0;
 }
 
-void CGameWorld::OnModified()
+void CGameWorld::OnModified() const
 {
 	if(m_pChild)
 		m_pChild->m_IsValidCopy = false;

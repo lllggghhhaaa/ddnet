@@ -9,7 +9,9 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <iomanip> // std::get_time
 #include <iterator> // std::size
+#include <sstream> // std::istringstream
 #include <string_view>
 
 #include "lock.h"
@@ -111,8 +113,8 @@ IOHANDLE io_current_exe()
 	{
 		return 0;
 	}
-	const std::string path = windows_wide_to_utf8(wide_path);
-	return io_open(path.c_str(), IOFLAG_READ);
+	const std::optional<std::string> path = windows_wide_to_utf8(wide_path);
+	return path.has_value() ? io_open(path.value().c_str(), IOFLAG_READ) : 0;
 #elif defined(CONF_PLATFORM_MACOS)
 	char path[IO_MAX_PATH_LENGTH];
 	uint32_t path_size = sizeof(path);
@@ -182,7 +184,7 @@ bool dbg_assert_has_failed()
 	return dbg_assert_failing.load(std::memory_order_acquire);
 }
 
-void dbg_assert_imp(const char *filename, int line, int test, const char *msg)
+void dbg_assert_imp(const char *filename, int line, bool test, const char *msg)
 {
 	if(!test)
 	{
@@ -271,7 +273,7 @@ IOHANDLE io_open_impl(const char *filename, int flags)
 	else if(flags == IOFLAG_WRITE)
 	{
 		desired_access = FILE_WRITE_DATA;
-		creation_disposition = OPEN_ALWAYS;
+		creation_disposition = CREATE_ALWAYS;
 		open_mode = "wb";
 	}
 	else if(flags == IOFLAG_APPEND)
@@ -963,6 +965,9 @@ int64_t time_freq()
 }
 
 /* -----  network ----- */
+
+const NETADDR NETADDR_ZEROED = {NETTYPE_INVALID, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0};
+
 static void netaddr_to_sockaddr_in(const NETADDR *src, struct sockaddr_in *dest)
 {
 	mem_zero(dest, sizeof(struct sockaddr_in));
@@ -1456,9 +1461,9 @@ std::string windows_format_system_message(unsigned long error)
 	if(FormatMessageW(flags, NULL, error, 0, (LPWSTR)&wide_message, 0, NULL) == 0)
 		return "unknown error";
 
-	std::string message = windows_wide_to_utf8(wide_message);
+	std::optional<std::string> message = windows_wide_to_utf8(wide_message);
 	LocalFree(wide_message);
-	return message;
+	return message.value_or("(invalid UTF-16 in error message)");
 }
 #endif
 
@@ -1548,14 +1553,17 @@ NETSOCKET net_udp_create(NETADDR bindaddr)
 
 			/* set broadcast */
 			if(setsockopt(socket, SOL_SOCKET, SO_BROADCAST, (const char *)&broadcast, sizeof(broadcast)) != 0)
-				dbg_msg("socket", "Setting BROADCAST on ipv4 failed: %d", errno);
+			{
+				dbg_msg("socket", "Setting BROADCAST on ipv4 failed: %d", net_errno());
+			}
 
 			{
 				/* set DSCP/TOS */
 				int iptos = 0x10 /* IPTOS_LOWDELAY */;
-				//int iptos = 46; /* High Priority */
 				if(setsockopt(socket, IPPROTO_IP, IP_TOS, (char *)&iptos, sizeof(iptos)) != 0)
-					dbg_msg("socket", "Setting TOS on ipv4 failed: %d", errno);
+				{
+					dbg_msg("socket", "Setting TOS on ipv4 failed: %d", net_errno());
+				}
 			}
 		}
 	}
@@ -1593,15 +1601,21 @@ NETSOCKET net_udp_create(NETADDR bindaddr)
 
 			/* set broadcast */
 			if(setsockopt(socket, SOL_SOCKET, SO_BROADCAST, (const char *)&broadcast, sizeof(broadcast)) != 0)
-				dbg_msg("socket", "Setting BROADCAST on ipv6 failed: %d", errno);
+			{
+				dbg_msg("socket", "Setting BROADCAST on ipv6 failed: %d", net_errno());
+			}
 
+			// TODO: setting IP_TOS on ipv6 with setsockopt is not supported on Windows, see https://github.com/ddnet/ddnet/issues/7605
+#if !defined(CONF_FAMILY_WINDOWS)
 			{
 				/* set DSCP/TOS */
 				int iptos = 0x10 /* IPTOS_LOWDELAY */;
-				//int iptos = 46; /* High Priority */
 				if(setsockopt(socket, IPPROTO_IP, IP_TOS, (char *)&iptos, sizeof(iptos)) != 0)
-					dbg_msg("socket", "Setting TOS on ipv6 failed: %d", errno);
+				{
+					dbg_msg("socket", "Setting TOS on ipv6 failed: %d", net_errno());
+				}
 			}
+#endif
 		}
 	}
 
@@ -2108,8 +2122,13 @@ void fs_listdir(const char *dir, FS_LISTDIR_CALLBACK cb, int type, void *user)
 
 	do
 	{
-		const std::string current_entry = windows_wide_to_utf8(finddata.cFileName);
-		if(cb(current_entry.c_str(), (finddata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0, type, user))
+		const std::optional<std::string> current_entry = windows_wide_to_utf8(finddata.cFileName);
+		if(!current_entry.has_value())
+		{
+			log_error("filesystem", "ERROR: file/folder name containing invalid UTF-16 found in folder '%s'", dir);
+			continue;
+		}
+		if(cb(current_entry.value().c_str(), (finddata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0, type, user))
 			break;
 	} while(FindNextFileW(handle, &finddata));
 
@@ -2155,10 +2174,15 @@ void fs_listdir_fileinfo(const char *dir, FS_LISTDIR_CALLBACK_FILEINFO cb, int t
 
 	do
 	{
-		const std::string current_entry = windows_wide_to_utf8(finddata.cFileName);
+		const std::optional<std::string> current_entry = windows_wide_to_utf8(finddata.cFileName);
+		if(!current_entry.has_value())
+		{
+			log_error("filesystem", "ERROR: file/folder name containing invalid UTF-16 found in folder '%s'", dir);
+			continue;
+		}
 
 		CFsFileInfo info;
-		info.m_pName = current_entry.c_str();
+		info.m_pName = current_entry.value().c_str();
 		info.m_TimeCreated = filetime_to_unixtime(&finddata.ftCreationTime);
 		info.m_TimeModified = filetime_to_unixtime(&finddata.ftLastWriteTime);
 
@@ -2212,8 +2236,14 @@ int fs_storage_path(const char *appname, char *path, int max)
 		path[0] = '\0';
 		return -1;
 	}
-	const std::string home = windows_wide_to_utf8(wide_home);
-	str_format(path, max, "%s/%s", home.c_str(), appname);
+	const std::optional<std::string> home = windows_wide_to_utf8(wide_home);
+	if(!home.has_value())
+	{
+		log_error("filesystem", "ERROR: the APPDATA environment variable contains invalid UTF-16");
+		path[0] = '\0';
+		return -1;
+	}
+	str_format(path, max, "%s/%s", home.value().c_str(), appname);
 	return 0;
 #else
 	char *home = getenv("HOME");
@@ -2386,8 +2416,13 @@ char *fs_getcwd(char *buffer, int buffer_size)
 		buffer[0] = '\0';
 		return nullptr;
 	}
-	const std::string current_dir = windows_wide_to_utf8(wide_current_dir.c_str());
-	str_copy(buffer, current_dir.c_str(), buffer_size);
+	const std::optional<std::string> current_dir = windows_wide_to_utf8(wide_current_dir.c_str());
+	if(!current_dir.has_value())
+	{
+		buffer[0] = '\0';
+		return nullptr;
+	}
+	str_copy(buffer, current_dir.value().c_str(), buffer_size);
 	return buffer;
 #else
 	char *result = getcwd(buffer, buffer_size);
@@ -2583,13 +2618,24 @@ int time_timestamp()
 	return time(0);
 }
 
+static struct tm *time_localtime_threadlocal(time_t *time_data)
+{
+#if defined(CONF_FAMILY_WINDOWS)
+	// The result of localtime is thread-local on Windows
+	// https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/localtime-localtime32-localtime64
+	return localtime(time_data);
+#else
+	// Thread-local buffer for the result of localtime_r
+	thread_local struct tm time_info_buf;
+	return localtime_r(time_data, &time_info_buf);
+#endif
+}
+
 int time_houroftheday()
 {
 	time_t time_data;
-	struct tm *time_info;
-
 	time(&time_data);
-	time_info = localtime(&time_data);
+	struct tm *time_info = time_localtime_threadlocal(&time_data);
 	return time_info->tm_hour;
 }
 
@@ -2616,7 +2662,7 @@ static bool time_iseasterday(time_t time_data, struct tm *time_info)
 	for(int day_offset = -1; day_offset <= 2; day_offset++)
 	{
 		time_data = time_data + day_offset * 60 * 60 * 24;
-		time_info = localtime(&time_data);
+		time_info = time_localtime_threadlocal(&time_data);
 		if(time_info->tm_mon == month - 1 && time_info->tm_mday == day)
 			return true;
 	}
@@ -2627,7 +2673,7 @@ ETimeSeason time_season()
 {
 	time_t time_data;
 	time(&time_data);
-	struct tm *time_info = localtime(&time_data);
+	struct tm *time_info = time_localtime_threadlocal(&time_data);
 
 	if((time_info->tm_mon == 11 && time_info->tm_mday == 31) || (time_info->tm_mon == 0 && time_info->tm_mday == 1))
 	{
@@ -3396,8 +3442,7 @@ int str_base64_decode(void *dst_raw, int dst_size, const char *data)
 #endif
 void str_timestamp_ex(time_t time_data, char *buffer, int buffer_size, const char *format)
 {
-	struct tm *time_info;
-	time_info = localtime(&time_data);
+	struct tm *time_info = time_localtime_threadlocal(&time_data);
 	strftime(buffer, buffer_size, format, time_info);
 	buffer[buffer_size - 1] = 0; /* assure null termination */
 }
@@ -3412,6 +3457,22 @@ void str_timestamp_format(char *buffer, int buffer_size, const char *format)
 void str_timestamp(char *buffer, int buffer_size)
 {
 	str_timestamp_format(buffer, buffer_size, FORMAT_NOSPACE);
+}
+
+bool timestamp_from_str(const char *string, const char *format, time_t *timestamp)
+{
+	std::tm tm{};
+	std::istringstream ss(string);
+	ss >> std::get_time(&tm, format);
+	if(ss.fail() || !ss.eof())
+		return false;
+
+	time_t result = mktime(&tm);
+	if(result < 0)
+		return false;
+
+	*timestamp = result;
+	return true;
 }
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
@@ -3453,8 +3514,12 @@ int str_time(int64_t centisecs, int format, char *buffer, int buffer_size)
 				(centisecs % hour) / min, (centisecs % min) / sec, centisecs % sec);
 		[[fallthrough]];
 	case TIME_MINS_CENTISECS:
-		return str_format(buffer, buffer_size, "%02" PRId64 ":%02" PRId64 ".%02" PRId64, centisecs / min,
-			(centisecs % min) / sec, centisecs % sec);
+		if(centisecs >= min)
+			return str_format(buffer, buffer_size, "%02" PRId64 ":%02" PRId64 ".%02" PRId64, centisecs / min,
+				(centisecs % min) / sec, centisecs % sec);
+		[[fallthrough]];
+	case TIME_SECS_CENTISECS:
+		return str_format(buffer, buffer_size, "%02" PRId64 ".%02" PRId64, (centisecs % min) / sec, centisecs % sec);
 	}
 
 	return -1;
@@ -4401,8 +4466,9 @@ void os_locale_str(char *locale, size_t length)
 	wchar_t wide_buffer[LOCALE_NAME_MAX_LENGTH];
 	dbg_assert(GetUserDefaultLocaleName(wide_buffer, std::size(wide_buffer)) > 0, "GetUserDefaultLocaleName failure");
 
-	const std::string buffer = windows_wide_to_utf8(wide_buffer);
-	str_copy(locale, buffer.c_str(), length);
+	const std::optional<std::string> buffer = windows_wide_to_utf8(wide_buffer);
+	dbg_assert(buffer.has_value(), "GetUserDefaultLocaleName returned invalid UTF-16");
+	str_copy(locale, buffer.value().c_str(), length);
 #elif defined(CONF_PLATFORM_MACOS)
 	CFLocaleRef locale_ref = CFLocaleCopyCurrent();
 	CFStringRef locale_identifier_ref = static_cast<CFStringRef>(CFLocaleGetValue(locale_ref, kCFLocaleIdentifier));
@@ -4527,20 +4593,23 @@ std::wstring windows_utf8_to_wide(const char *str)
 	const int orig_length = str_length(str);
 	if(orig_length == 0)
 		return L"";
-	const int size_needed = MultiByteToWideChar(CP_UTF8, 0, str, orig_length, nullptr, 0);
+	const int size_needed = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, str, orig_length, nullptr, 0);
+	dbg_assert(size_needed > 0, "Invalid UTF-8 passed to windows_utf8_to_wide");
 	std::wstring wide_string(size_needed, L'\0');
-	dbg_assert(MultiByteToWideChar(CP_UTF8, 0, str, orig_length, wide_string.data(), size_needed) == size_needed, "MultiByteToWideChar failure");
+	dbg_assert(MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, str, orig_length, wide_string.data(), size_needed) == size_needed, "MultiByteToWideChar failure");
 	return wide_string;
 }
 
-std::string windows_wide_to_utf8(const wchar_t *wide_str)
+std::optional<std::string> windows_wide_to_utf8(const wchar_t *wide_str)
 {
 	const int orig_length = wcslen(wide_str);
 	if(orig_length == 0)
 		return "";
-	const int size_needed = WideCharToMultiByte(CP_UTF8, 0, wide_str, orig_length, nullptr, 0, nullptr, nullptr);
+	const int size_needed = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide_str, orig_length, nullptr, 0, nullptr, nullptr);
+	if(size_needed == 0)
+		return {};
 	std::string string(size_needed, '\0');
-	dbg_assert(WideCharToMultiByte(CP_UTF8, 0, wide_str, orig_length, string.data(), size_needed, nullptr, nullptr) == size_needed, "WideCharToMultiByte failure");
+	dbg_assert(WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide_str, orig_length, string.data(), size_needed, nullptr, nullptr) == size_needed, "WideCharToMultiByte failure");
 	return string;
 }
 

@@ -41,7 +41,7 @@ void CStatboard::OnConsoleInit()
 	Console()->Register("+statboard", "", CFGFLAG_CLIENT, ConKeyStats, this, "Show stats");
 }
 
-bool CStatboard::IsActive()
+bool CStatboard::IsActive() const
 {
 	return m_Active;
 }
@@ -292,7 +292,7 @@ void CStatboard::RenderGlobalStats()
 
 		const CAnimState *pIdleState = CAnimState::GetIdle();
 		vec2 OffsetToMid;
-		RenderTools()->GetRenderTeeOffsetToRenderedTee(pIdleState, &Teeinfo, OffsetToMid);
+		CRenderTools::GetRenderTeeOffsetToRenderedTee(pIdleState, &Teeinfo, OffsetToMid);
 		vec2 TeeRenderPos(x + Teeinfo.m_Size / 2, y + LineHeight / 2.0f + OffsetToMid.y);
 
 		RenderTools()->RenderTee(pIdleState, &Teeinfo, EMOTE_NORMAL, vec2(1, 0), TeeRenderPos);

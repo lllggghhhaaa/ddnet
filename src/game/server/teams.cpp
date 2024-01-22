@@ -274,11 +274,14 @@ void CGameTeams::Tick()
 		{
 			continue;
 		}
+		bool TeamHasCheatCharacter = false;
 		int NumPlayersNotStarted = 0;
 		char aPlayerNames[256];
 		aPlayerNames[0] = 0;
 		for(int j = 0; j < MAX_CLIENTS; j++)
 		{
+			if(Character(j) && Character(j)->m_DDRaceState == DDRACE_CHEAT)
+				TeamHasCheatCharacter = true;
 			if(m_Core.Team(j) == i && !m_aTeeStarted[j])
 			{
 				if(aPlayerNames[0])
@@ -289,7 +292,7 @@ void CGameTeams::Tick()
 				NumPlayersNotStarted += 1;
 			}
 		}
-		if(!aPlayerNames[0])
+		if(!aPlayerNames[0] || TeamHasCheatCharacter)
 		{
 			continue;
 		}
@@ -771,20 +774,18 @@ void CGameTeams::OnFinish(CPlayer *Player, float Time, const char *pTimestamp)
 			}
 		}
 	}
-	else
+
+	CNetMsg_Sv_RaceFinish RaceFinishMsg;
+	RaceFinishMsg.m_ClientID = ClientID;
+	RaceFinishMsg.m_Time = Time * 1000;
+	RaceFinishMsg.m_Diff = 0;
+	if(pData->m_BestTime)
 	{
-		protocol7::CNetMsg_Sv_RaceFinish Msg;
-		Msg.m_ClientID = ClientID;
-		Msg.m_Time = Time * 1000;
-		Msg.m_Diff = 0;
-		if(pData->m_BestTime)
-		{
-			Msg.m_Diff = Diff * 1000 * (Time < pData->m_BestTime ? -1 : 1);
-		}
-		Msg.m_RecordPersonal = Time < pData->m_BestTime;
-		Msg.m_RecordServer = Time < GameServer()->m_pController->m_CurrentRecord;
-		Server()->SendPackMsg(&Msg, MSGFLAG_VITAL | MSGFLAG_NORECORD, -1);
+		RaceFinishMsg.m_Diff = Diff * 1000 * (Time < pData->m_BestTime ? -1 : 1);
 	}
+	RaceFinishMsg.m_RecordPersonal = (Time < pData->m_BestTime || !pData->m_BestTime);
+	RaceFinishMsg.m_RecordServer = Time < GameServer()->m_pController->m_CurrentRecord;
+	Server()->SendPackMsg(&RaceFinishMsg, MSGFLAG_VITAL | MSGFLAG_NORECORD, -1);
 
 	bool CallSaveScore = g_Config.m_SvSaveWorseScores;
 	bool NeedToSendNewPersonalRecord = false;

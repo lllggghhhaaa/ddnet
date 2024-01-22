@@ -280,7 +280,7 @@ void CMenus::RenderServerbrowserServerList(CUIRect View, bool &WasListboxItemAct
 			{
 				if(pItem->m_Favorite != TRISTATE::NONE)
 				{
-					RenderBrowserIcons(*pUiElement->Rect(UI_ELEM_FAVORITE_ICON), &Button, ColorRGBA(0.94f, 0.4f, 0.4f, 1.0f), TextRender()->DefaultTextOutlineColor(), FONT_ICON_HEART, TEXTALIGN_MC);
+					RenderBrowserIcons(*pUiElement->Rect(UI_ELEM_FAVORITE_ICON), &Button, ColorRGBA(1.0f, 0.85f, 0.3f, 1.0f), TextRender()->DefaultTextOutlineColor(), FONT_ICON_STAR, TEXTALIGN_MC);
 				}
 			}
 			else if(ID == COL_COMMUNITY)
@@ -1222,7 +1222,7 @@ void CMenus::RenderServerbrowserInfoScoreboard(CUIRect View, const CServerInfo *
 			const CTeeRenderInfo TeeInfo = GetTeeRenderInfo(vec2(Skin.w, Skin.h), CurrentClient.m_aSkin, CurrentClient.m_CustomSkinColors, CurrentClient.m_CustomSkinColorBody, CurrentClient.m_CustomSkinColorFeet);
 			const CAnimState *pIdleState = CAnimState::GetIdle();
 			vec2 OffsetToMid;
-			RenderTools()->GetRenderTeeOffsetToRenderedTee(pIdleState, &TeeInfo, OffsetToMid);
+			CRenderTools::GetRenderTeeOffsetToRenderedTee(pIdleState, &TeeInfo, OffsetToMid);
 			const vec2 TeeRenderPos = vec2(Skin.x + TeeInfo.m_Size / 2.0f, Skin.y + Skin.h / 2.0f + OffsetToMid.y);
 			RenderTools()->RenderTee(pIdleState, &TeeInfo, CurrentClient.m_Afk ? EMOTE_BLINK : EMOTE_NORMAL, vec2(1.0f, 0.0f), TeeRenderPos);
 		}
@@ -1423,7 +1423,7 @@ void CMenus::RenderServerbrowserFriends(CUIRect View)
 					const CTeeRenderInfo TeeInfo = GetTeeRenderInfo(vec2(Skin.w, Skin.h), Friend.Skin(), Friend.CustomSkinColors(), Friend.CustomSkinColorBody(), Friend.CustomSkinColorFeet());
 					const CAnimState *pIdleState = CAnimState::GetIdle();
 					vec2 OffsetToMid;
-					RenderTools()->GetRenderTeeOffsetToRenderedTee(pIdleState, &TeeInfo, OffsetToMid);
+					CRenderTools::GetRenderTeeOffsetToRenderedTee(pIdleState, &TeeInfo, OffsetToMid);
 					const vec2 TeeRenderPos = vec2(Skin.x + Skin.w / 2.0f, Skin.y + Skin.h * 0.55f + OffsetToMid.y);
 					RenderTools()->RenderTee(pIdleState, &TeeInfo, Friend.IsAfk() ? EMOTE_BLINK : EMOTE_NORMAL, vec2(1.0f, 0.0f), TeeRenderPos);
 				}
@@ -1802,25 +1802,6 @@ CMenus::CAbstractCommunityIconJob::CAbstractCommunityIconJob(CMenus *pMenus, con
 	str_format(m_aPath, sizeof(m_aPath), "communityicons/%s.png", pCommunityId);
 }
 
-CMenus::CAbstractCommunityIconJob::~CAbstractCommunityIconJob()
-{
-	free(m_ImageInfo.m_pData);
-	m_ImageInfo.m_pData = nullptr;
-}
-
-int CMenus::CCommunityIconDownloadJob::OnCompletion(int State)
-{
-	State = CHttpRequest::OnCompletion(State);
-	if(State == HTTP_DONE)
-	{
-		if(m_pMenus->LoadCommunityIconFile(Dest(), IStorage::TYPE_SAVE, m_ImageInfo, m_Sha256))
-			m_Success = true;
-		else
-			State = HTTP_ERROR;
-	}
-	return State;
-}
-
 CMenus::CCommunityIconDownloadJob::CCommunityIconDownloadJob(CMenus *pMenus, const char *pCommunityId, const char *pUrl, const SHA256_DIGEST &Sha256) :
 	CHttpRequest(pUrl),
 	CAbstractCommunityIconJob(pMenus, pCommunityId, IStorage::TYPE_SAVE)
@@ -1839,6 +1820,12 @@ void CMenus::CCommunityIconLoadJob::Run()
 CMenus::CCommunityIconLoadJob::CCommunityIconLoadJob(CMenus *pMenus, const char *pCommunityId, int StorageType) :
 	CAbstractCommunityIconJob(pMenus, pCommunityId, StorageType)
 {
+}
+
+CMenus::CCommunityIconLoadJob::~CCommunityIconLoadJob()
+{
+	free(m_ImageInfo.m_pData);
+	m_ImageInfo.m_pData = nullptr;
 }
 
 int CMenus::CommunityIconScan(const char *pName, int IsDir, int DirType, void *pUser)
@@ -1908,8 +1895,8 @@ void CMenus::LoadCommunityIconFinish(const char *pCommunityId, CImageInfo &&Info
 		pData[i * Step + 1] = v;
 		pData[i * Step + 2] = v;
 	}
-	CommunityIcon.m_GreyTexture = Graphics()->LoadTextureRaw(Info.m_Width, Info.m_Height, Info.m_Format, Info.m_pData, 0);
-	Graphics()->FreePNG(&Info);
+	CommunityIcon.m_GreyTexture = Graphics()->LoadTextureRawMove(Info.m_Width, Info.m_Height, Info.m_Format, Info.m_pData, 0);
+	Info.m_pData = nullptr;
 
 	auto ExistingIcon = std::find_if(m_vCommunityIcons.begin(), m_vCommunityIcons.end(), [pCommunityId](const SCommunityIcon &Element) {
 		return str_comp(Element.m_aCommunityId, pCommunityId) == 0;
@@ -1964,10 +1951,14 @@ void CMenus::UpdateCommunityIcons()
 	if(!m_CommunityIconDownloadJobs.empty())
 	{
 		std::shared_ptr<CCommunityIconDownloadJob> pJob = m_CommunityIconDownloadJobs.front();
-		if(pJob->Status() == IJob::STATE_DONE)
+		if(pJob->Done())
 		{
-			if(pJob->Success())
-				LoadCommunityIconFinish(pJob->CommunityId(), pJob->ImageInfo(), pJob->Sha256());
+			if(pJob->State() == EHttpState::DONE)
+			{
+				std::shared_ptr<CCommunityIconLoadJob> pLoadJob = std::make_shared<CCommunityIconLoadJob>(this, pJob->CommunityId(), IStorage::TYPE_SAVE);
+				Engine()->AddJob(pLoadJob);
+				m_CommunityIconLoadJobs.emplace_back(std::move(pLoadJob));
+			}
 			m_CommunityIconDownloadJobs.pop_front();
 		}
 	}
@@ -2007,7 +1998,7 @@ void CMenus::UpdateCommunityIcons()
 		if(pExistingDownload == m_CommunityIconDownloadJobs.end() && (ExistingIcon == m_vCommunityIcons.end() || ExistingIcon->m_Sha256 != Community.IconSha256()))
 		{
 			std::shared_ptr<CCommunityIconDownloadJob> pJob = std::make_shared<CCommunityIconDownloadJob>(this, Community.Id(), Community.IconUrl(), Community.IconSha256());
-			Engine()->AddJob(pJob);
+			Http()->Run(pJob);
 			m_CommunityIconDownloadJobs.push_back(pJob);
 		}
 	}

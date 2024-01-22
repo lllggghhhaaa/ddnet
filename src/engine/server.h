@@ -8,6 +8,7 @@
 
 #include <base/hash.h>
 #include <base/math.h>
+#include <base/system.h>
 
 #include "kernel.h"
 #include "message.h"
@@ -156,6 +157,21 @@ public:
 		return SendPackMsgOne(&MsgCopy, Flags, ClientID);
 	}
 
+	int SendPackMsgTranslate(const CNetMsg_Sv_RaceFinish *pMsg, int Flags, int ClientID)
+	{
+		if(IsSixup(ClientID))
+		{
+			protocol7::CNetMsg_Sv_RaceFinish Msg7;
+			Msg7.m_ClientID = pMsg->m_ClientID;
+			Msg7.m_Diff = pMsg->m_Diff;
+			Msg7.m_Time = pMsg->m_Time;
+			Msg7.m_RecordPersonal = pMsg->m_RecordPersonal;
+			Msg7.m_RecordServer = pMsg->m_RecordServer;
+			return SendPackMsgOne(&Msg7, Flags, ClientID);
+		}
+		return SendPackMsgOne(pMsg, Flags, ClientID);
+	}
+
 	template<class T>
 	int SendPackMsgOne(const T *pMsg, int Flags, int ClientID)
 	{
@@ -245,6 +261,7 @@ public:
 	virtual void StartRecord(int ClientID) = 0;
 	virtual void StopRecord(int ClientID) = 0;
 	virtual bool IsRecording(int ClientID) = 0;
+	virtual void StopDemos() = 0;
 
 	virtual void GetClientAddr(int ClientID, NETADDR *pAddr) const = 0;
 

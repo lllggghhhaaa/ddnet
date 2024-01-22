@@ -1391,6 +1391,7 @@ set(EXPECTED_DATA
   editor/background.png
   editor/checker.png
   editor/cursor.png
+  editor/cursor_resize.png
   editor/entities/DDNet.png
   editor/entities/FNG.png
   editor/entities/Race.png
@@ -1543,6 +1544,7 @@ set(EXPECTED_DATA
   menuimages/play_game.png
   menuimages/settings.png
   particles.png
+  race_flag.png
   shader/pipeline.frag
   shader/pipeline.vert
   shader/prim.frag
@@ -1882,11 +1884,13 @@ set_src(ENGINE_INTERFACE GLOB src/engine
   friends.h
   ghost.h
   graphics.h
+  http.h
   input.h
   kernel.h
   keys.h
   map.h
   message.h
+  notifications.h
   rust.h
   server.h
   serverbrowser.h
@@ -2015,6 +2019,8 @@ set_src(GAME_SHARED GLOB src/game
   version.h
   voting.h
 )
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "src/game/version.h")
+
 # A bit hacky, but these are needed to register all the UUIDs, even for stuff
 # that doesn't link game.
 set(ENGINE_UUID_SHARED
@@ -2156,6 +2162,7 @@ if(CLIENT)
     updater.h
     video.cpp
     video.h
+    warning.cpp
   )
   set_src(GAME_CLIENT GLOB_RECURSE src/game/client
     animstate.cpp
@@ -2194,10 +2201,10 @@ if(CLIENT)
     components/ghost.h
     components/hud.cpp
     components/hud.h
+    components/infomessages.cpp
+    components/infomessages.h
     components/items.cpp
     components/items.h
-    components/killmessages.cpp
-    components/killmessages.h
     components/mapimages.cpp
     components/mapimages.h
     components/maplayers.cpp
@@ -2284,13 +2291,22 @@ if(CLIENT)
     component.h
     editor.cpp
     editor.h
+    editor_action.h
+    editor_actions.cpp
+    editor_actions.h
+    editor_history.cpp
+    editor_history.h
     editor_object.cpp
     editor_object.h
+    editor_props.cpp
+    editor_trackers.cpp
+    editor_trackers.h
     explanations.cpp
     map_grid.cpp
     map_grid.h
     map_view.cpp
     map_view.h
+    mapitems.h
     mapitems/envelope.cpp
     mapitems/envelope.h
     mapitems/image.cpp
@@ -2771,6 +2787,7 @@ if(GTEST_FOUND OR DOWNLOAD_GTEST)
     test.cpp
     test.h
     thread.cpp
+    timestamp.cpp
     unix.cpp
     uuid.cpp
   )
@@ -3073,7 +3090,6 @@ if(NOT DEV)
   endif()
   install(TARGETS ${TARGETS_TOOLS} DESTINATION ${CMAKE_INSTALL_LIBDIR}/ddnet COMPONENT tools)
   install(FILES other/ddnet.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications COMPONENT client)
-  install(FILES other/ddnet.appdata.xml DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/metainfo COMPONENT client)
   foreach(SIZE 16 32 48 256)
     install(FILES other/icons/DDNet_${SIZE}x${SIZE}x32.png DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/${SIZE}x${SIZE}/apps RENAME ddnet.png COMPONENT client)
     install(FILES other/icons/DDNet-Server_${SIZE}x${SIZE}x32.png DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/${SIZE}x${SIZE}/apps RENAME ddnet-server.png COMPONENT server)

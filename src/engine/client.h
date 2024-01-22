@@ -69,31 +69,30 @@ public:
 
 protected:
 	// quick access to state of the client
-	EClientState m_State;
-	ELoadingStateDetail m_LoadingStateDetail;
+	EClientState m_State = IClient::STATE_OFFLINE;
+	ELoadingStateDetail m_LoadingStateDetail = LOADING_STATE_DETAIL_INITIAL;
 	int64_t m_StateStartTime;
 
 	// quick access to time variables
-	int m_aPrevGameTick[NUM_DUMMIES];
-	int m_aCurGameTick[NUM_DUMMIES];
-	float m_aGameIntraTick[NUM_DUMMIES];
-	float m_aGameTickTime[NUM_DUMMIES];
-	float m_aGameIntraTickSincePrev[NUM_DUMMIES];
+	int m_aPrevGameTick[NUM_DUMMIES] = {0, 0};
+	int m_aCurGameTick[NUM_DUMMIES] = {0, 0};
+	float m_aGameIntraTick[NUM_DUMMIES] = {0.0f, 0.0f};
+	float m_aGameTickTime[NUM_DUMMIES] = {0.0f, 0.0f};
+	float m_aGameIntraTickSincePrev[NUM_DUMMIES] = {0.0f, 0.0f};
 
-	int m_aPredTick[NUM_DUMMIES];
-	float m_aPredIntraTick[NUM_DUMMIES];
+	int m_aPredTick[NUM_DUMMIES] = {0, 0};
+	float m_aPredIntraTick[NUM_DUMMIES] = {0.0f, 0.0f};
 
-	float m_LocalTime;
-	float m_GlobalTime;
-	float m_RenderFrameTime;
+	float m_LocalTime = 0.0f;
+	float m_GlobalTime = 0.0f;
+	float m_RenderFrameTime = 0.0001f;
+	float m_FrameTimeAvg = 0.0001f;
 
-	float m_FrameTimeAvg;
+	TMapLoadingCallbackFunc m_MapLoadingCBFunc = nullptr;
 
-	TMapLoadingCallbackFunc m_MapLoadingCBFunc;
-
-	char m_aNews[3000];
-	int m_Points;
-	int64_t m_ReconnectTime;
+	char m_aNews[3000] = "";
+	int m_Points = -1;
+	int64_t m_ReconnectTime = 0;
 
 public:
 	class CSnapItem
@@ -166,7 +165,7 @@ public:
 #endif
 	virtual void DemoRecorder_Start(const char *pFilename, bool WithTimestamp, int Recorder, bool Verbose = false) = 0;
 	virtual void DemoRecorder_HandleAutoStart() = 0;
-	virtual void DemoRecorder_Stop(int Recorder, bool RemoveFile = false) = 0;
+	virtual void DemoRecorder_UpdateReplayRecorder() = 0;
 	virtual class IDemoRecorder *DemoRecorder(int Recorder) = 0;
 	virtual void AutoScreenshot_Start() = 0;
 	virtual void AutoStatScreenshot_Start() = 0;
@@ -325,7 +324,7 @@ public:
 	virtual int OnSnapInput(int *pData, bool Dummy, bool Force) = 0;
 	virtual void OnDummySwap() = 0;
 	virtual void SendDummyInfo(bool Start) = 0;
-	virtual int GetLastRaceTick() = 0;
+	virtual int GetLastRaceTick() const = 0;
 
 	virtual const char *GetItemName(int Type) const = 0;
 	virtual const char *Version() const = 0;
@@ -336,8 +335,8 @@ public:
 	virtual void OnDummyDisconnect() = 0;
 	virtual void DummyResetInput() = 0;
 	virtual void Echo(const char *pString) = 0;
-	virtual bool CanDisplayWarning() = 0;
-	virtual bool IsDisplayingWarning() = 0;
+	virtual bool CanDisplayWarning() const = 0;
+	virtual bool IsDisplayingWarning() const = 0;
 
 	virtual CNetObjHandler *GetNetObjHandler() = 0;
 };

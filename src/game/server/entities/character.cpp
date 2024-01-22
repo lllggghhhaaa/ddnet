@@ -262,7 +262,7 @@ void CCharacter::HandleNinja()
 		Collision()->MoveBox(&m_Core.m_Pos, &m_Core.m_Vel, vec2(GetProximityRadius(), GetProximityRadius()), GroundElasticity);
 
 		// reset velocity so the client doesn't predict stuff
-		m_Core.m_Vel = vec2(0.f, 0.f);
+		ResetVelocity();
 
 		// check if we Hit anything along the way
 		{
@@ -698,11 +698,16 @@ void CCharacter::OnDirectInput(CNetObj_PlayerInput *pNewInput)
 	mem_copy(&m_LatestPrevInput, &m_LatestInput, sizeof(m_LatestInput));
 }
 
-void CCharacter::ResetHook()
+void CCharacter::ReleaseHook()
 {
 	m_Core.SetHookedPlayer(-1);
 	m_Core.m_HookState = HOOK_RETRACTED;
 	m_Core.m_TriggeredEvents |= COREEVENT_HOOK_RETRACT;
+}
+
+void CCharacter::ResetHook()
+{
+	ReleaseHook();
 	m_Core.m_HookPos = m_Core.m_Pos;
 }
 
@@ -734,8 +739,7 @@ void CCharacter::PreTick()
 	// set emote
 	if(m_EmoteStop < Server()->Tick())
 	{
-		m_EmoteType = m_pPlayer->GetDefaultEmote();
-		m_EmoteStop = -1;
+		SetEmote(m_pPlayer->GetDefaultEmote(), -1);
 	}
 
 	DDRaceTick();
@@ -968,8 +972,7 @@ bool CCharacter::TakeDamage(vec2 Force, int Dmg, int From, int Weapon)
 {
 	if(Dmg)
 	{
-		m_EmoteType = EMOTE_PAIN;
-		m_EmoteStop = Server()->Tick() + 500 * Server()->TickSpeed() / 1000;
+		SetEmote(EMOTE_PAIN, Server()->Tick() + 500 * Server()->TickSpeed() / 1000);
 	}
 
 	vec2 Temp = m_Core.m_Vel + Force;
@@ -1100,6 +1103,10 @@ void CCharacter::SnapCharacter(int SnappingClient, int ID)
 		{
 			pCharacter->m_Angle -= (int)(2.0f * pi * 256.0f);
 		}
+
+		// m_HookTick can be negative when using the hook_duration tune, which 0.7 clients
+		// will consider invalid. https://github.com/ddnet/ddnet/issues/3915
+		pCharacter->m_HookTick = maximum(0, pCharacter->m_HookTick);
 
 		pCharacter->m_Tick = Tick;
 		pCharacter->m_Emote = Emote;
@@ -1638,7 +1645,7 @@ void CCharacter::HandleTiles(int Index)
 		m_Core.m_Jumped = 0;
 		m_Core.m_JumpedTotal = 0;
 	}
-	m_Core.m_Vel = ClampVel(m_MoveRestrictions, m_Core.m_Vel);
+	ApplyMoveRestrictions();
 
 	// handle switch tiles
 	if(Collision()->GetSwitchType(MapIndex) == TILE_SWITCHOPEN && Team() != TEAM_SUPER && Collision()->GetSwitchNumber(MapIndex) > 0)
@@ -2353,6 +2360,43 @@ void CCharacter::Rescue()
 CClientMask CCharacter::TeamMask()
 {
 	return Teams()->TeamMask(Team(), -1, GetPlayer()->GetCID());
+}
+
+void CCharacter::SetPosition(const vec2 &Position)
+{
+	m_Core.m_Pos = Position;
+}
+
+void CCharacter::Move(vec2 RelPos)
+{
+	m_Core.m_Pos += RelPos;
+}
+
+void CCharacter::ResetVelocity()
+{
+	m_Core.m_Vel = vec2(0, 0);
+}
+
+void CCharacter::SetVelocity(vec2 NewVelocity)
+{
+	m_Core.m_Vel = ClampVel(m_MoveRestrictions, NewVelocity);
+}
+
+// The method is needed only to reproduce 'shotgun bug' ddnet#5258
+// Use SetVelocity() instead.
+void CCharacter::SetRawVelocity(vec2 NewVelocity)
+{
+	m_Core.m_Vel = NewVelocity;
+}
+
+void CCharacter::AddVelocity(vec2 Addition)
+{
+	SetVelocity(m_Core.m_Vel + Addition);
+}
+
+void CCharacter::ApplyMoveRestrictions()
+{
+	m_Core.m_Vel = ClampVel(m_MoveRestrictions, m_Core.m_Vel);
 }
 
 void CCharacter::SwapClients(int Client1, int Client2)
