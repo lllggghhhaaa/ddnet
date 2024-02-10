@@ -28,7 +28,7 @@ SEditResult<E> CEditor::DoPropertiesWithState(CUIRect *pToolBox, CProperty *pPro
 		Shifter.HMargin(1.0f, &Shifter);
 		UI()->DoLabel(&Label, pProps[i].m_pName, 10.0f, TEXTALIGN_ML);
 
-		if(pProps[i].m_Type == PROPTYPE_INT_STEP)
+		if(pProps[i].m_Type == PROPTYPE_INT)
 		{
 			CUIRect Inc, Dec;
 			char aBuf[64];
@@ -72,17 +72,6 @@ SEditResult<E> CEditor::DoPropertiesWithState(CUIRect *pToolBox, CProperty *pPro
 				*pNewVal = 1;
 				Change = i;
 				State = EEditState::ONE_GO;
-			}
-		}
-		else if(pProps[i].m_Type == PROPTYPE_INT_SCROLL)
-		{
-			auto NewValueRes = UiDoValueSelector(&pIDs[i], &Shifter, "", pProps[i].m_Value, pProps[i].m_Min, pProps[i].m_Max, 1, 1.0f, "Use left mouse button to drag and change the value. Hold shift to be more precise. Rightclick to edit as text.");
-			int NewValue = NewValueRes.m_Value;
-			if(NewValue != pProps[i].m_Value || NewValueRes.m_State != EEditState::EDITING)
-			{
-				*pNewVal = NewValue;
-				Change = i;
-				State = NewValueRes.m_State;
 			}
 		}
 		else if(pProps[i].m_Type == PROPTYPE_ANGLE_SCROLL)
@@ -154,11 +143,11 @@ SEditResult<E> CEditor::DoPropertiesWithState(CUIRect *pToolBox, CProperty *pPro
 			Shifter.VSplitMid(&Left, &Up, 2.0f);
 			Left.VSplitLeft(10.0f, &Left, &Shifter);
 			Shifter.VSplitRight(10.0f, &Shifter, &Right);
-			Shifter.Draw(ColorRGBA(1, 1, 1, 0.5f), 0, 0.0f);
+			Shifter.Draw(ColorRGBA(1, 1, 1, 0.5f), IGraphics::CORNER_NONE, 0.0f);
 			UI()->DoLabel(&Shifter, "X", 10.0f, TEXTALIGN_MC);
 			Up.VSplitLeft(10.0f, &Up, &Shifter);
 			Shifter.VSplitRight(10.0f, &Shifter, &Down);
-			Shifter.Draw(ColorRGBA(1, 1, 1, 0.5f), 0, 0.0f);
+			Shifter.Draw(ColorRGBA(1, 1, 1, 0.5f), IGraphics::CORNER_NONE, 0.0f);
 			UI()->DoLabel(&Shifter, "Y", 10.0f, TEXTALIGN_MC);
 			if(DoButton_ButtonDec(&pIDs[i], "-", 0, &Left, 0, "Left"))
 			{

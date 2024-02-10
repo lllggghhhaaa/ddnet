@@ -207,6 +207,7 @@ private:
 	static void ConchainLanguageUpdate(IConsole::IResult *pResult, void *pUserData, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData);
 	static void ConchainSpecialInfoupdate(IConsole::IResult *pResult, void *pUserData, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData);
 	static void ConchainSpecialDummyInfoupdate(IConsole::IResult *pResult, void *pUserData, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData);
+	static void ConchainRefreshSkins(IConsole::IResult *pResult, void *pUserData, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData);
 	static void ConchainSpecialDummy(IConsole::IResult *pResult, void *pUserData, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData);
 	static void ConchainClTextEntitiesSize(IConsole::IResult *pResult, void *pUserData, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData);
 
@@ -499,6 +500,8 @@ public:
 	void OnLanguageChange();
 	void HandleLanguageChanged();
 
+	void RefreshSkins();
+
 	void RenderShutdownMessage();
 
 	const char *GetItemName(int Type) const override;
@@ -552,7 +555,6 @@ public:
 	int SwitchStateTeam() const;
 	bool IsLocalCharSuper() const;
 	bool CanDisplayWarning() const override;
-	bool IsDisplayingWarning() const override;
 	CNetObjHandler *GetNetObjHandler() override;
 
 	void LoadGameSkin(const char *pPath, bool AsDir = false);
@@ -560,8 +562,6 @@ public:
 	void LoadParticlesSkin(const char *pPath, bool AsDir = false);
 	void LoadHudSkin(const char *pPath, bool AsDir = false);
 	void LoadExtrasSkin(const char *pPath, bool AsDir = false);
-
-	void RefindSkins();
 
 	struct SClientGameSkin
 	{
@@ -705,6 +705,7 @@ public:
 		IGraphics::CTextureHandle m_SpriteHudTeleportGun;
 		IGraphics::CTextureHandle m_SpriteHudTeleportLaser;
 		IGraphics::CTextureHandle m_SpriteHudPracticeMode;
+		IGraphics::CTextureHandle m_SpriteHudLockMode;
 		IGraphics::CTextureHandle m_SpriteHudDummyHammer;
 		IGraphics::CTextureHandle m_SpriteHudDummyCopy;
 	};

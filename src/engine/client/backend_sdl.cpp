@@ -1459,7 +1459,7 @@ void CGraphicsBackend_SDL_GL::Maximize()
 	// TODO: SDL
 }
 
-void CGraphicsBackend_SDL_GL::SetWindowParams(int FullscreenMode, bool IsBorderless, bool AllowResizing)
+void CGraphicsBackend_SDL_GL::SetWindowParams(int FullscreenMode, bool IsBorderless)
 {
 	if(FullscreenMode > 0)
 	{
@@ -1520,6 +1520,8 @@ bool CGraphicsBackend_SDL_GL::SetWindowScreen(int Index)
 	{
 		return false;
 	}
+	// Todo SDL: remove this when fixed (changing screen when in fullscreen is bugged)
+	SDL_SetWindowBordered(m_pWindow, SDL_TRUE); //fixing primary monitor goes black when switch screen (borderless OpenGL)
 
 	SDL_SetWindowPosition(m_pWindow,
 		SDL_WINDOWPOS_CENTERED_DISPLAY(Index),
@@ -1574,7 +1576,7 @@ bool CGraphicsBackend_SDL_GL::ResizeWindow(int w, int h, int RefreshRate)
 	{
 #ifdef CONF_FAMILY_WINDOWS
 		// in windows make the window windowed mode first, this prevents strange window glitches (other games probably do something similar)
-		SetWindowParams(0, true, true);
+		SetWindowParams(0, true);
 #endif
 		SDL_DisplayMode SetMode = {};
 		SDL_DisplayMode ClosestMode = {};
@@ -1586,7 +1588,7 @@ bool CGraphicsBackend_SDL_GL::ResizeWindow(int w, int h, int RefreshRate)
 #ifdef CONF_FAMILY_WINDOWS
 		// now change it back to fullscreen, this will restore the above set state, bcs SDL saves fullscreen modes apart from other video modes (as of SDL 2.0.16)
 		// see implementation of SDL_SetWindowDisplayMode
-		SetWindowParams(1, false, true);
+		SetWindowParams(1, false);
 #endif
 		return true;
 	}

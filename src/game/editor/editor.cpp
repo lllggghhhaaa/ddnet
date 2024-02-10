@@ -41,6 +41,7 @@
 #include "editor_actions.h"
 
 #include <chrono>
+#include <iterator>
 #include <limits>
 #include <type_traits>
 
@@ -113,16 +114,16 @@ void CEditor::EnvelopeEval(int TimeOffsetMillis, int Env, ColorRGBA &Channels, v
  OTHER
 *********************************************************/
 
-bool CEditor::DoEditBox(CLineInput *pLineInput, const CUIRect *pRect, float FontSize, int Corners, const char *pToolTip)
+bool CEditor::DoEditBox(CLineInput *pLineInput, const CUIRect *pRect, float FontSize, int Corners, const char *pToolTip, const std::vector<STextColorSplit> &vColorSplits)
 {
 	UpdateTooltip(pLineInput, pRect, pToolTip);
-	return UI()->DoEditBox(pLineInput, pRect, FontSize, Corners);
+	return UI()->DoEditBox(pLineInput, pRect, FontSize, Corners, vColorSplits);
 }
 
-bool CEditor::DoClearableEditBox(CLineInput *pLineInput, const CUIRect *pRect, float FontSize, int Corners, const char *pToolTip)
+bool CEditor::DoClearableEditBox(CLineInput *pLineInput, const CUIRect *pRect, float FontSize, int Corners, const char *pToolTip, const std::vector<STextColorSplit> &vColorSplits)
 {
 	UpdateTooltip(pLineInput, pRect, pToolTip);
-	return UI()->DoClearableEditBox(pLineInput, pRect, FontSize, Corners);
+	return UI()->DoClearableEditBox(pLineInput, pRect, FontSize, Corners, vColorSplits);
 }
 
 ColorRGBA CEditor::GetButtonColor(const void *pID, int Checked)
@@ -318,7 +319,7 @@ int CEditor::DoButton_DraggableEx(const void *pID, const char *pText, int Checke
 	return UI()->DoDraggableButtonLogic(pID, Checked, pRect, pClicked, pAbrupted);
 }
 
-void CEditor::RenderBackground(CUIRect View, IGraphics::CTextureHandle Texture, float Size, float Brightness)
+void CEditor::RenderBackground(CUIRect View, IGraphics::CTextureHandle Texture, float Size, float Brightness) const
 {
 	Graphics()->TextureSet(Texture);
 	Graphics()->BlendNormal();
@@ -778,7 +779,8 @@ bool CEditor::CallbackOpenMap(const char *pFileName, int StorageType, void *pUse
 	if(pEditor->Load(pFileName, StorageType))
 	{
 		pEditor->m_ValidSaveFilename = StorageType == IStorage::TYPE_SAVE && (pEditor->m_pFileDialogPath == pEditor->m_aFileDialogCurrentFolder || (pEditor->m_pFileDialogPath == pEditor->m_aFileDialogCurrentLink && str_comp(pEditor->m_aFileDialogCurrentLink, "themes") == 0));
-		pEditor->m_Dialog = DIALOG_NONE;
+		if(pEditor->m_Dialog == DIALOG_FILE)
+			pEditor->m_Dialog = DIALOG_NONE;
 		return true;
 	}
 	else
@@ -1308,7 +1310,7 @@ void CEditor::DoToolbarLayers(CUIRect ToolBar)
 					{
 						pButtonName = "Switch";
 						pfnPopupFunc = PopupSwitch;
-						Rows = 2;
+						Rows = 3;
 					}
 					else if(pS == m_Map.m_pSpeedupLayer)
 					{
@@ -1326,7 +1328,7 @@ void CEditor::DoToolbarLayers(CUIRect ToolBar)
 					{
 						pButtonName = "Tele";
 						pfnPopupFunc = PopupTele;
-						Rows = 2;
+						Rows = 3;
 					}
 
 					if(pButtonName != nullptr)
@@ -1545,7 +1547,7 @@ void CEditor::DoPointDrag(const std::shared_ptr<CLayerQuads> &pLayer, CQuad *pQu
 	pQuad->m_aPoints[PointIndex].y = m_QuadDragOriginalPoints[QuadIndex][PointIndex].y + OffsetY;
 }
 
-CEditor::EAxis CEditor::GetDragAxis(int OffsetX, int OffsetY)
+CEditor::EAxis CEditor::GetDragAxis(int OffsetX, int OffsetY) const
 {
 	if(Input()->ShiftIsPressed())
 		if(absolute(OffsetX) < absolute(OffsetY))
@@ -1556,7 +1558,7 @@ CEditor::EAxis CEditor::GetDragAxis(int OffsetX, int OffsetY)
 		return EAxis::AXIS_NONE;
 }
 
-void CEditor::DrawAxis(EAxis Axis, CPoint &OriginalPoint, CPoint &Point)
+void CEditor::DrawAxis(EAxis Axis, CPoint &OriginalPoint, CPoint &Point) const
 {
 	if(Axis == EAxis::AXIS_NONE)
 		return;
@@ -1585,6 +1587,8 @@ void CEditor::ComputePointAlignments(const std::shared_ptr<CLayerQuads> &pLayer,
 	if(!g_Config.m_EdAlignQuads)
 		return;
 
+	bool IgnoreGrid = Input()->AltIsPressed();
+
 	// Perform computation from the original position of this point
 	int Threshold = f2fx(maximum(10.0f, 10.0f * m_MouseWScale));
 	CPoint OrigPoint = m_QuadDragOriginalPoints.at(QuadIndex)[PointIndex];
@@ -1603,8 +1607,14 @@ void CEditor::ComputePointAlignments(const std::shared_ptr<CLayerQuads> &pLayer,
 		int DiffX = absolute(DX);
 		int DiffY = absolute(DY);
 
-		// Check the X axis
-		if(DiffX <= Threshold)
+		const float PX = fx2f(pQuadPoint->x);
+		const float PY = fx2f(pQuadPoint->y);
+		float SnappedPX = PX;
+		float SnappedPY = PY;
+		if(MapView()->MapGrid()->IsEnabled() && !IgnoreGrid)
+			MapView()->MapGrid()->SnapToGrid(SnappedPX, SnappedPY);
+
+		if(DiffX <= Threshold && (SnappedPX == PX || DiffX == 0))
 		{
 			// Only store alignments that have the smallest difference
 			if(DiffX < SmallestDiffX)
@@ -1625,7 +1635,8 @@ void CEditor::ComputePointAlignments(const std::shared_ptr<CLayerQuads> &pLayer,
 				});
 			}
 		}
-		if(DiffY <= Threshold)
+
+		if(DiffY <= Threshold && (SnappedPY == PY || DiffY == 0))
 		{
 			// Only store alignments that have the smallest difference
 			if(DiffY < SmallestDiffY)
@@ -1775,6 +1786,8 @@ void CEditor::ComputeAABBAlignments(const std::shared_ptr<CLayerQuads> &pLayer, 
 	int SmallestDiffX = Threshold + 1, SmallestDiffY = Threshold + 1;
 	std::vector<SAlignmentInfo> vAlignmentsX, vAlignmentsY;
 
+	bool IgnoreGrid = Input()->AltIsPressed();
+
 	auto &&CheckAlignment = [&](CPoint &Aligned, int Point) {
 		CPoint ToCheck = AABB.m_aPoints[Point] + ivec2(OffsetX, OffsetY);
 		int DX = Aligned.x - ToCheck.x;
@@ -1782,7 +1795,14 @@ void CEditor::ComputeAABBAlignments(const std::shared_ptr<CLayerQuads> &pLayer, 
 		int DiffX = absolute(DX);
 		int DiffY = absolute(DY);
 
-		if(DiffX <= Threshold)
+		const float PX = fx2f(Aligned.x);
+		const float PY = fx2f(Aligned.y);
+		float SnappedPX = PX;
+		float SnappedPY = PY;
+		if(MapView()->MapGrid()->IsEnabled() && !IgnoreGrid)
+			MapView()->MapGrid()->SnapToGrid(SnappedPX, SnappedPY);
+
+		if(DiffX <= Threshold && (SnappedPX == PX || DiffX == 0))
 		{
 			if(DiffX < SmallestDiffX)
 			{
@@ -1801,7 +1821,8 @@ void CEditor::ComputeAABBAlignments(const std::shared_ptr<CLayerQuads> &pLayer, 
 				});
 			}
 		}
-		if(DiffY <= Threshold)
+
+		if(DiffY <= Threshold && (SnappedPY == PY || DiffY == 0))
 		{
 			if(DiffY < SmallestDiffY)
 			{
@@ -1871,7 +1892,7 @@ void CEditor::ComputeAABBAlignments(const std::shared_ptr<CLayerQuads> &pLayer, 
 	vAlignments.insert(vAlignments.end(), vAlignmentsY.begin(), vAlignmentsY.end());
 }
 
-void CEditor::DrawPointAlignments(const std::vector<SAlignmentInfo> &vAlignments, int OffsetX, int OffsetY)
+void CEditor::DrawPointAlignments(const std::vector<SAlignmentInfo> &vAlignments, int OffsetX, int OffsetY) const
 {
 	if(!g_Config.m_EdAlignQuads)
 		return;
@@ -1895,7 +1916,7 @@ void CEditor::DrawPointAlignments(const std::vector<SAlignmentInfo> &vAlignments
 	}
 }
 
-void CEditor::DrawAABB(const SAxisAlignedBoundingBox &AABB, int OffsetX, int OffsetY)
+void CEditor::DrawAABB(const SAxisAlignedBoundingBox &AABB, int OffsetX, int OffsetY) const
 {
 	// Drawing an AABB is simply converting the points from fixed to float
 	// Then making lines out of quads and drawing them
@@ -1933,12 +1954,13 @@ void CEditor::QuadSelectionAABB(const std::shared_ptr<CLayerQuads> &pLayer, SAxi
 	for(int Selected : m_vSelectedQuads)
 	{
 		CQuad *pQuad = &pLayer->m_vQuads[Selected];
-		for(auto &Point : pQuad->m_aPoints)
+		for(int i = 0; i < 4; i++)
 		{
-			Min.x = minimum(Min.x, Point.x);
-			Min.y = minimum(Min.y, Point.y);
-			Max.x = maximum(Max.x, Point.x);
-			Max.y = maximum(Max.y, Point.y);
+			auto *pPoint = &pQuad->m_aPoints[i];
+			Min.x = minimum(Min.x, pPoint->x);
+			Min.y = minimum(Min.y, pPoint->y);
+			Max.x = maximum(Max.x, pPoint->x);
+			Max.y = maximum(Max.y, pPoint->y);
 		}
 	}
 	CPoint Center = (Min + Max) / 2.0f;
@@ -1984,7 +2006,7 @@ void CEditor::ApplyAlignments(const std::vector<SAlignmentInfo> &vAlignments, in
 	OffsetY += AdjustY;
 }
 
-void CEditor::ApplyAxisAlignment(int &OffsetX, int &OffsetY)
+void CEditor::ApplyAxisAlignment(int &OffsetX, int &OffsetY) const
 {
 	// This is used to preserve axis alignment when pressing `Shift`
 	// Should be called before any other computation
@@ -3361,7 +3383,7 @@ void CEditor::DoMapEditor(CUIRect View)
 					m_pBrush->Clear();
 				}
 
-				if(UI()->MouseButton(0) && s_Operation == OP_NONE && !m_QuadKnifeActive)
+				if(!Input()->ModifierIsPressed() && UI()->MouseButton(0) && s_Operation == OP_NONE && !m_QuadKnifeActive)
 				{
 					UI()->SetActiveItem(s_pEditorID);
 
@@ -4389,8 +4411,16 @@ bool CEditor::SelectLayerByTile()
 					continue;
 
 				std::shared_ptr<CLayerTiles> pTiles = std::static_pointer_cast<CLayerTiles>(m_Map.m_vpGroups[g]->m_vpLayers[l]);
-				int x = (int)UI()->MouseWorldX() / 32 + m_Map.m_vpGroups[g]->m_OffsetX;
-				int y = (int)UI()->MouseWorldY() / 32 + m_Map.m_vpGroups[g]->m_OffsetY;
+
+				float aMapping[4];
+				m_Map.m_vpGroups[g]->Mapping(aMapping);
+				int x = aMapping[0] + (aMapping[2] - aMapping[0]) / 2;
+				int y = aMapping[1] + (aMapping[3] - aMapping[1]) / 2;
+				x += UI()->MouseWorldX() - (MapView()->GetWorldOffset().x * m_Map.m_vpGroups[g]->m_ParallaxX / 100) - m_Map.m_vpGroups[g]->m_OffsetX;
+				y += UI()->MouseWorldY() - (MapView()->GetWorldOffset().y * m_Map.m_vpGroups[g]->m_ParallaxY / 100) - m_Map.m_vpGroups[g]->m_OffsetY;
+				x /= 32;
+				y /= 32;
+
 				if(x < 0 || x >= pTiles->m_Width)
 					continue;
 				if(y < 0 || y >= pTiles->m_Height)
@@ -6460,20 +6490,17 @@ void CEditor::RenderEnvelopeEditor(CUIRect View)
 			}
 		}
 
-		// sync checkbox
+		// toggle sync button
 		ToolBar.VSplitLeft(15.0f, nullptr, &ToolBar);
-		ToolBar.VSplitLeft(12.0f, &Button, &ToolBar);
+		ToolBar.VSplitLeft(40.0f, &Button, &ToolBar);
+
 		static int s_SyncButton;
-		if(DoButton_Editor(&s_SyncButton, pEnvelope->m_Synchronized ? "X" : "", 0, &Button, 0, "Synchronize envelope animation to game time (restarts when you touch the start line)"))
+		if(DoButton_Editor(&s_SyncButton, "Sync", pEnvelope->m_Synchronized, &Button, 0, "Synchronize envelope animation to game time (restarts when you touch the start line)"))
 		{
 			m_EnvelopeEditorHistory.RecordAction(std::make_shared<CEditorActionEnvelopeEdit>(this, m_SelectedEnvelope, CEditorActionEnvelopeEdit::EEditType::SYNC, pEnvelope->m_Synchronized, !pEnvelope->m_Synchronized));
 			pEnvelope->m_Synchronized = !pEnvelope->m_Synchronized;
 			m_Map.OnModify();
 		}
-
-		ToolBar.VSplitLeft(4.0f, nullptr, &ToolBar);
-		ToolBar.VSplitLeft(40.0f, &Button, &ToolBar);
-		UI()->DoLabel(&Button, "Sync.", 10.0f, TEXTALIGN_ML);
 
 		const bool ShouldPan = s_Operation == EEnvelopeEditorOp::OP_NONE && (UI()->MouseButton(2) || (UI()->MouseButton(0) && Input()->ModifierIsPressed()));
 		if(m_pContainerPanned == &s_EnvelopeEditorID)
@@ -7515,189 +7542,6 @@ void CEditor::RenderEnvelopeEditor(CUIRect View)
 	}
 }
 
-void CEditor::RenderServerSettingsEditor(CUIRect View, bool ShowServerSettingsEditorLast)
-{
-	// TODO: improve validation (https://github.com/ddnet/ddnet/issues/1406)
-	// Returns true if the argument is a valid server setting
-	const auto &&ValidateServerSetting = [](const char *pStr) {
-		return str_find(pStr, " ") != nullptr;
-	};
-
-	static int s_CommandSelectedIndex = -1;
-	static CListBox s_ListBox;
-	s_ListBox.SetActive(m_Dialog == DIALOG_NONE && !UI()->IsPopupOpen());
-
-	bool GotSelection = s_ListBox.Active() && s_CommandSelectedIndex >= 0 && (size_t)s_CommandSelectedIndex < m_Map.m_vSettings.size();
-	const bool CurrentInputValid = ValidateServerSetting(m_SettingsCommandInput.GetString());
-
-	CUIRect ToolBar, Button, Label, List, DragBar;
-	View.HSplitTop(22.0f, &DragBar, nullptr);
-	DragBar.y -= 2.0f;
-	DragBar.w += 2.0f;
-	DragBar.h += 4.0f;
-	DoEditorDragBar(View, &DragBar, EDragSide::SIDE_TOP, &m_aExtraEditorSplits[EXTRAEDITOR_SERVER_SETTINGS]);
-	View.HSplitTop(20.0f, &ToolBar, &View);
-	View.HSplitTop(2.0f, nullptr, &List);
-	ToolBar.HMargin(2.0f, &ToolBar);
-
-	// delete button
-	ToolBar.VSplitRight(25.0f, &ToolBar, &Button);
-	ToolBar.VSplitRight(5.0f, &ToolBar, nullptr);
-	static int s_DeleteButton = 0;
-	if(DoButton_FontIcon(&s_DeleteButton, FONT_ICON_TRASH, GotSelection ? 0 : -1, &Button, 0, "[Delete] Delete the selected command from the command list.", IGraphics::CORNER_ALL, 9.0f) == 1 || (GotSelection && CLineInput::GetActiveInput() == nullptr && m_Dialog == DIALOG_NONE && UI()->ConsumeHotkey(CUI::HOTKEY_DELETE)))
-	{
-		m_ServerSettingsHistory.RecordAction(std::make_shared<CEditorCommandAction>(this, CEditorCommandAction::EType::DELETE, &s_CommandSelectedIndex, s_CommandSelectedIndex, m_Map.m_vSettings[s_CommandSelectedIndex].m_aCommand));
-
-		m_Map.m_vSettings.erase(m_Map.m_vSettings.begin() + s_CommandSelectedIndex);
-		if(s_CommandSelectedIndex >= (int)m_Map.m_vSettings.size())
-			s_CommandSelectedIndex = m_Map.m_vSettings.size() - 1;
-		if(s_CommandSelectedIndex >= 0)
-			m_SettingsCommandInput.Set(m_Map.m_vSettings[s_CommandSelectedIndex].m_aCommand);
-		m_Map.OnModify();
-		s_ListBox.ScrollToSelected();
-	}
-
-	// move down button
-	ToolBar.VSplitRight(25.0f, &ToolBar, &Button);
-	const bool CanMoveDown = GotSelection && s_CommandSelectedIndex < (int)m_Map.m_vSettings.size() - 1;
-	static int s_DownButton = 0;
-	if(DoButton_FontIcon(&s_DownButton, FONT_ICON_SORT_DOWN, CanMoveDown ? 0 : -1, &Button, 0, "[Alt+Down] Move the selected command down.", IGraphics::CORNER_R, 11.0f) == 1 || (CanMoveDown && Input()->AltIsPressed() && UI()->ConsumeHotkey(CUI::HOTKEY_DOWN)))
-	{
-		m_ServerSettingsHistory.RecordAction(std::make_shared<CEditorCommandAction>(this, CEditorCommandAction::EType::MOVE_DOWN, &s_CommandSelectedIndex, s_CommandSelectedIndex));
-
-		std::swap(m_Map.m_vSettings[s_CommandSelectedIndex], m_Map.m_vSettings[s_CommandSelectedIndex + 1]);
-		s_CommandSelectedIndex++;
-		m_Map.OnModify();
-		s_ListBox.ScrollToSelected();
-	}
-
-	// move up button
-	ToolBar.VSplitRight(25.0f, &ToolBar, &Button);
-	ToolBar.VSplitRight(5.0f, &ToolBar, nullptr);
-	const bool CanMoveUp = GotSelection && s_CommandSelectedIndex > 0;
-	static int s_UpButton = 0;
-	if(DoButton_FontIcon(&s_UpButton, FONT_ICON_SORT_UP, CanMoveUp ? 0 : -1, &Button, 0, "[Alt+Up] Move the selected command up.", IGraphics::CORNER_L, 11.0f) == 1 || (CanMoveUp && Input()->AltIsPressed() && UI()->ConsumeHotkey(CUI::HOTKEY_UP)))
-	{
-		m_ServerSettingsHistory.RecordAction(std::make_shared<CEditorCommandAction>(this, CEditorCommandAction::EType::MOVE_UP, &s_CommandSelectedIndex, s_CommandSelectedIndex));
-
-		std::swap(m_Map.m_vSettings[s_CommandSelectedIndex], m_Map.m_vSettings[s_CommandSelectedIndex - 1]);
-		s_CommandSelectedIndex--;
-		m_Map.OnModify();
-		s_ListBox.ScrollToSelected();
-	}
-
-	// redo button
-	ToolBar.VSplitRight(25.0f, &ToolBar, &Button);
-	static int s_RedoButton = 0;
-	if(DoButton_FontIcon(&s_RedoButton, FONT_ICON_REDO, m_ServerSettingsHistory.CanRedo() ? 0 : -1, &Button, 0, "[Ctrl+Y] Redo command edit", IGraphics::CORNER_R, 11.0f) == 1 || (CanMoveDown && Input()->AltIsPressed() && UI()->ConsumeHotkey(CUI::HOTKEY_DOWN)))
-	{
-		m_ServerSettingsHistory.Redo();
-	}
-
-	// undo button
-	ToolBar.VSplitRight(25.0f, &ToolBar, &Button);
-	ToolBar.VSplitRight(5.0f, &ToolBar, nullptr);
-	static int s_UndoButton = 0;
-	if(DoButton_FontIcon(&s_UndoButton, FONT_ICON_UNDO, m_ServerSettingsHistory.CanUndo() ? 0 : -1, &Button, 0, "[Ctrl+Z] Undo command edit", IGraphics::CORNER_L, 11.0f) == 1 || (CanMoveUp && Input()->AltIsPressed() && UI()->ConsumeHotkey(CUI::HOTKEY_UP)))
-	{
-		m_ServerSettingsHistory.Undo();
-	}
-
-	GotSelection = s_ListBox.Active() && s_CommandSelectedIndex >= 0 && (size_t)s_CommandSelectedIndex < m_Map.m_vSettings.size();
-
-	// update button
-	ToolBar.VSplitRight(25.0f, &ToolBar, &Button);
-	const bool CanUpdate = GotSelection && CurrentInputValid && str_comp(m_Map.m_vSettings[s_CommandSelectedIndex].m_aCommand, m_SettingsCommandInput.GetString()) != 0;
-	static int s_UpdateButton = 0;
-	if(DoButton_FontIcon(&s_UpdateButton, FONT_ICON_PENCIL, CanUpdate ? 0 : -1, &Button, 0, "[Alt+Enter] Update the selected command based on the entered value.", IGraphics::CORNER_R, 9.0f) == 1 || (CanUpdate && Input()->AltIsPressed() && m_Dialog == DIALOG_NONE && UI()->ConsumeHotkey(CUI::HOTKEY_ENTER)))
-	{
-		bool Found = false;
-		int i;
-		for(i = 0; i < (int)m_Map.m_vSettings.size(); ++i)
-		{
-			if(i != s_CommandSelectedIndex && !str_comp(m_Map.m_vSettings[i].m_aCommand, m_SettingsCommandInput.GetString()))
-			{
-				Found = true;
-				break;
-			}
-		}
-		if(Found)
-		{
-			m_ServerSettingsHistory.RecordAction(std::make_shared<CEditorCommandAction>(this, CEditorCommandAction::EType::DELETE, &s_CommandSelectedIndex, s_CommandSelectedIndex, m_Map.m_vSettings[s_CommandSelectedIndex].m_aCommand));
-			m_Map.m_vSettings.erase(m_Map.m_vSettings.begin() + s_CommandSelectedIndex);
-			s_CommandSelectedIndex = i > s_CommandSelectedIndex ? i - 1 : i;
-		}
-		else
-		{
-			const char *pStr = m_SettingsCommandInput.GetString();
-			m_ServerSettingsHistory.RecordAction(std::make_shared<CEditorCommandAction>(this, CEditorCommandAction::EType::EDIT, &s_CommandSelectedIndex, s_CommandSelectedIndex, m_Map.m_vSettings[s_CommandSelectedIndex].m_aCommand, pStr));
-			str_copy(m_Map.m_vSettings[s_CommandSelectedIndex].m_aCommand, pStr);
-		}
-		m_Map.OnModify();
-		s_ListBox.ScrollToSelected();
-		UI()->SetActiveItem(&m_SettingsCommandInput);
-	}
-
-	// add button
-	ToolBar.VSplitRight(25.0f, &ToolBar, &Button);
-	ToolBar.VSplitRight(100.0f, &ToolBar, nullptr);
-	const bool CanAdd = s_ListBox.Active() && CurrentInputValid;
-	static int s_AddButton = 0;
-	if(DoButton_FontIcon(&s_AddButton, FONT_ICON_PLUS, CanAdd ? 0 : -1, &Button, 0, "[Enter] Add a command to the command list.", IGraphics::CORNER_L) == 1 || (CanAdd && !Input()->AltIsPressed() && m_Dialog == DIALOG_NONE && UI()->ConsumeHotkey(CUI::HOTKEY_ENTER)))
-	{
-		bool Found = false;
-		for(size_t i = 0; i < m_Map.m_vSettings.size(); ++i)
-		{
-			if(!str_comp(m_Map.m_vSettings[i].m_aCommand, m_SettingsCommandInput.GetString()))
-			{
-				s_CommandSelectedIndex = i;
-				Found = true;
-				break;
-			}
-		}
-
-		if(!Found)
-		{
-			m_Map.m_vSettings.emplace_back(m_SettingsCommandInput.GetString());
-			s_CommandSelectedIndex = m_Map.m_vSettings.size() - 1;
-			m_ServerSettingsHistory.RecordAction(std::make_shared<CEditorCommandAction>(this, CEditorCommandAction::EType::ADD, &s_CommandSelectedIndex, s_CommandSelectedIndex, m_Map.m_vSettings[s_CommandSelectedIndex].m_aCommand));
-			m_Map.OnModify();
-		}
-		s_ListBox.ScrollToSelected();
-		UI()->SetActiveItem(&m_SettingsCommandInput);
-	}
-
-	// command input (use remaining toolbar width)
-	if(!ShowServerSettingsEditorLast) // Just activated
-		UI()->SetActiveItem(&m_SettingsCommandInput);
-	m_SettingsCommandInput.SetEmptyText("Command");
-	DoClearableEditBox(&m_SettingsCommandInput, &ToolBar, 12.0f, IGraphics::CORNER_ALL, "Enter a server setting.");
-
-	// command list
-	s_ListBox.DoStart(15.0f, m_Map.m_vSettings.size(), 1, 3, s_CommandSelectedIndex, &List);
-
-	for(size_t i = 0; i < m_Map.m_vSettings.size(); i++)
-	{
-		const CListboxItem Item = s_ListBox.DoNextItem(&m_Map.m_vSettings[i], s_CommandSelectedIndex >= 0 && (size_t)s_CommandSelectedIndex == i);
-		if(!Item.m_Visible)
-			continue;
-
-		Item.m_Rect.VMargin(5.0f, &Label);
-
-		SLabelProperties Props;
-		Props.m_MaxWidth = Label.w;
-		Props.m_EllipsisAtEnd = true;
-		UI()->DoLabel(&Label, m_Map.m_vSettings[i].m_aCommand, 10.0f, TEXTALIGN_ML, Props);
-	}
-
-	const int NewSelected = s_ListBox.DoEnd();
-	if(s_CommandSelectedIndex != NewSelected)
-	{
-		s_CommandSelectedIndex = NewSelected;
-		m_SettingsCommandInput.Set(m_Map.m_vSettings[s_CommandSelectedIndex].m_aCommand);
-	}
-}
-
 void CEditor::RenderEditorHistory(CUIRect View)
 {
 	enum EHistoryType
@@ -8220,6 +8064,12 @@ void CEditor::Render()
 		UI()->SetHotItem(&s_NullUiTarget);
 		RenderFileDialog();
 	}
+	else if(m_Dialog == DIALOG_MAPSETTINGS_ERROR)
+	{
+		static int s_NullUiTarget = 0;
+		UI()->SetHotItem(&s_NullUiTarget);
+		RenderMapSettingsErrorDialog();
+	}
 
 	if(m_PopupEventActivated)
 	{
@@ -8507,9 +8357,11 @@ void CEditor::Reset(bool CreateDefault)
 
 	m_EnvOpTracker.m_pEditor = this;
 	m_EnvOpTracker.Reset();
+
+	m_MapSettingsCommandContext.Reset();
 }
 
-int CEditor::GetTextureUsageFlag()
+int CEditor::GetTextureUsageFlag() const
 {
 	return Graphics()->Uses2DTextureArrays() ? IGraphics::TEXLOAD_TO_2D_ARRAY_TEXTURE : IGraphics::TEXLOAD_TO_3D_TEXTURE;
 }
@@ -8560,7 +8412,8 @@ void CEditor::Init()
 {
 	m_pInput = Kernel()->RequestInterface<IInput>();
 	m_pClient = Kernel()->RequestInterface<IClient>();
-	m_pConfig = Kernel()->RequestInterface<IConfigManager>()->Values();
+	m_pConfigManager = Kernel()->RequestInterface<IConfigManager>();
+	m_pConfig = m_pConfigManager->Values();
 	m_pConsole = Kernel()->RequestInterface<IConsole>();
 	m_pEngine = Kernel()->RequestInterface<IEngine>();
 	m_pGraphics = Kernel()->RequestInterface<IGraphics>();
@@ -8577,6 +8430,7 @@ void CEditor::Init()
 	m_Map.m_pEditor = this;
 
 	m_vComponents.emplace_back(m_MapView);
+	m_vComponents.emplace_back(m_MapSettingsBackend);
 	for(CEditorComponent &Component : m_vComponents)
 		Component.Init(this);
 

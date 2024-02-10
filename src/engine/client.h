@@ -174,7 +174,7 @@ public:
 
 	// gfx
 	virtual void SwitchWindowScreen(int Index) = 0;
-	virtual void SetWindowParams(int FullscreenMode, bool IsBorderless, bool AllowResizing) = 0;
+	virtual void SetWindowParams(int FullscreenMode, bool IsBorderless) = 0;
 	virtual void ToggleWindowVSync() = 0;
 	virtual void Notify(const char *pTitle, const char *pMessage) = 0;
 	virtual void OnWindowResize() = 0;
@@ -242,8 +242,6 @@ public:
 	virtual const char *LatestVersion() const = 0;
 	virtual bool ConnectionProblems() const = 0;
 
-	virtual bool SoundInitFailed() const = 0;
-
 	virtual IGraphics::CTextureHandle GetDebugFont() const = 0; // TODO: remove this function
 
 	//DDRace
@@ -280,7 +278,6 @@ public:
 	virtual SWarning *GetCurWarning() = 0;
 
 	virtual CChecksumData *ChecksumData() = 0;
-	virtual bool InfoTaskRunning() = 0;
 	virtual int UdpConnectivity(int NetType) = 0;
 
 #if defined(CONF_FAMILY_WINDOWS)
@@ -336,7 +333,6 @@ public:
 	virtual void DummyResetInput() = 0;
 	virtual void Echo(const char *pString) = 0;
 	virtual bool CanDisplayWarning() const = 0;
-	virtual bool IsDisplayingWarning() const = 0;
 
 	virtual CNetObjHandler *GetNetObjHandler() = 0;
 };

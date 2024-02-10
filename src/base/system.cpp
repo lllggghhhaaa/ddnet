@@ -3590,6 +3590,18 @@ int str_toint(const char *str)
 	return str_toint_base(str, 10);
 }
 
+bool str_toint(const char *str, int *out)
+{
+	// returns true if conversion was successful
+	char *end;
+	int value = strtol(str, &end, 10);
+	if(*end != '\0')
+		return false;
+	if(out != nullptr)
+		*out = value;
+	return true;
+}
+
 int str_toint_base(const char *str, int base)
 {
 	return strtol(str, nullptr, base);
@@ -3608,6 +3620,18 @@ int64_t str_toint64_base(const char *str, int base)
 float str_tofloat(const char *str)
 {
 	return strtod(str, nullptr);
+}
+
+bool str_tofloat(const char *str, float *out)
+{
+	// returns true if conversion was successful
+	char *end;
+	float value = strtod(str, &end);
+	if(*end != '\0')
+		return false;
+	if(out != nullptr)
+		*out = value;
+	return true;
 }
 
 void str_from_int(int value, char *buffer, size_t buffer_size)
@@ -4082,7 +4106,7 @@ void cmdline_free(int argc, const char **argv)
 #endif
 }
 
-PROCESS shell_execute(const char *file)
+PROCESS shell_execute(const char *file, EShellExecuteWindowState window_state)
 {
 #if defined(CONF_FAMILY_WINDOWS)
 	const std::wstring wide_file = windows_utf8_to_wide(file);
@@ -4092,7 +4116,18 @@ PROCESS shell_execute(const char *file)
 	info.cbSize = sizeof(SHELLEXECUTEINFOW);
 	info.lpVerb = L"open";
 	info.lpFile = wide_file.c_str();
-	info.nShow = SW_SHOWMINNOACTIVE;
+	switch(window_state)
+	{
+	case EShellExecuteWindowState::FOREGROUND:
+		info.nShow = SW_SHOW;
+		break;
+	case EShellExecuteWindowState::BACKGROUND:
+		info.nShow = SW_SHOWMINNOACTIVE;
+		break;
+	default:
+		dbg_assert(false, "window_state invalid");
+		dbg_break();
+	}
 	info.fMask = SEE_MASK_NOCLOSEPROCESS;
 	// Save and restore the FPU control word because ShellExecute might change it
 	fenv_t floating_point_environment;

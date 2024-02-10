@@ -47,96 +47,6 @@
 
 extern bool IsInterrupted();
 
-CSnapIDPool::CSnapIDPool()
-{
-	Reset();
-}
-
-void CSnapIDPool::Reset()
-{
-	for(int i = 0; i < MAX_IDS; i++)
-	{
-		m_aIDs[i].m_Next = i + 1;
-		m_aIDs[i].m_State = ID_FREE;
-	}
-
-	m_aIDs[MAX_IDS - 1].m_Next = -1;
-	m_FirstFree = 0;
-	m_FirstTimed = -1;
-	m_LastTimed = -1;
-	m_Usage = 0;
-	m_InUsage = 0;
-}
-
-void CSnapIDPool::RemoveFirstTimeout()
-{
-	int NextTimed = m_aIDs[m_FirstTimed].m_Next;
-
-	// add it to the free list
-	m_aIDs[m_FirstTimed].m_Next = m_FirstFree;
-	m_aIDs[m_FirstTimed].m_State = ID_FREE;
-	m_FirstFree = m_FirstTimed;
-
-	// remove it from the timed list
-	m_FirstTimed = NextTimed;
-	if(m_FirstTimed == -1)
-		m_LastTimed = -1;
-
-	m_Usage--;
-}
-
-int CSnapIDPool::NewID()
-{
-	int64_t Now = time_get();
-
-	// process timed ids
-	while(m_FirstTimed != -1 && m_aIDs[m_FirstTimed].m_Timeout < Now)
-		RemoveFirstTimeout();
-
-	int ID = m_FirstFree;
-	if(ID == -1)
-	{
-		dbg_msg("server", "invalid id");
-		return ID;
-	}
-	m_FirstFree = m_aIDs[m_FirstFree].m_Next;
-	m_aIDs[ID].m_State = ID_ALLOCATED;
-	m_Usage++;
-	m_InUsage++;
-	return ID;
-}
-
-void CSnapIDPool::TimeoutIDs()
-{
-	// process timed ids
-	while(m_FirstTimed != -1)
-		RemoveFirstTimeout();
-}
-
-void CSnapIDPool::FreeID(int ID)
-{
-	if(ID < 0)
-		return;
-	dbg_assert((size_t)ID < std::size(m_aIDs), "id is out of range");
-	dbg_assert(m_aIDs[ID].m_State == ID_ALLOCATED, "id is not allocated");
-
-	m_InUsage--;
-	m_aIDs[ID].m_State = ID_TIMED;
-	m_aIDs[ID].m_Timeout = time_get() + time_freq() * 5;
-	m_aIDs[ID].m_Next = -1;
-
-	if(m_LastTimed != -1)
-	{
-		m_aIDs[m_LastTimed].m_Next = ID;
-		m_LastTimed = ID;
-	}
-	else
-	{
-		m_FirstTimed = ID;
-		m_LastTimed = ID;
-	}
-}
-
 void CServerBan::InitServerBan(IConsole *pConsole, IStorage *pStorage, CServer *pServer)
 {
 	CNetBan::Init(pConsole, pStorage);
@@ -2741,7 +2651,7 @@ int CServer::Run()
 	// load map
 	if(!LoadMap(Config()->m_SvMap))
 	{
-		dbg_msg("server", "failed to load map. mapname='%s'", Config()->m_SvMap);
+		log_error("server", "failed to load map. mapname='%s'", Config()->m_SvMap);
 		return -1;
 	}
 
@@ -2769,7 +2679,7 @@ int CServer::Run()
 	}
 	else if(net_host_lookup(g_Config.m_Bindaddr, &BindAddr, NETTYPE_ALL) != 0)
 	{
-		dbg_msg("server", "The configured bindaddr '%s' cannot be resolved", g_Config.m_Bindaddr);
+		log_error("server", "The configured bindaddr '%s' cannot be resolved", g_Config.m_Bindaddr);
 		return -1;
 	}
 	BindAddr.type = Config()->m_SvIpv4Only ? NETTYPE_IPV4 : NETTYPE_ALL;
@@ -2779,13 +2689,13 @@ int CServer::Run()
 	{
 		if(Port != 0 || BindAddr.port >= 8310)
 		{
-			dbg_msg("server", "couldn't open socket. port %d might already be in use", BindAddr.port);
+			log_error("server", "couldn't open socket. port %d might already be in use", BindAddr.port);
 			return -1;
 		}
 	}
 
 	if(Port == 0)
-		dbg_msg("server", "using port %d", BindAddr.port);
+		log_info("server", "using port %d", BindAddr.port);
 
 #if defined(CONF_UPNP)
 	m_UPnP.Open(BindAddr);
@@ -2824,9 +2734,9 @@ int CServer::Run()
 
 	if(m_AuthManager.IsGenerated())
 	{
-		dbg_msg("server", "+-------------------------+");
-		dbg_msg("server", "| rcon password: '%s' |", Config()->m_SvRconPassword);
-		dbg_msg("server", "+-------------------------+");
+		log_info("server", "+-------------------------+");
+		log_info("server", "| rcon password: '%s' |", Config()->m_SvRconPassword);
+		log_info("server", "+-------------------------+");
 	}
 
 	// start game
@@ -3084,7 +2994,7 @@ int CServer::Run()
 
 	if(ErrorShutdown())
 	{
-		dbg_msg("server", "shutdown from game server (%s)", m_aErrorShutdownReason);
+		log_info("server", "shutdown from game server (%s)", m_aErrorShutdownReason);
 		pDisconnectReason = m_aErrorShutdownReason;
 	}
 	// disconnect all clients on shutdown
